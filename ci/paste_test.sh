@@ -14,6 +14,7 @@ done
 swiftc -O ci/paste_target.swift -o /tmp/paste_target 2>&1 | tail -3
 /tmp/paste_target &
 TARGET=$!
+echo "app cible : pid $TARGET"
 sleep 4
 
 TOKEN="colle-auto-$RANDOM"

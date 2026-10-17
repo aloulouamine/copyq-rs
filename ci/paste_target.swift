@@ -25,6 +25,17 @@ final class Delegate: NSObject, NSApplicationDelegate, NSTextFieldDelegate {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
+// Comme toute application : ⌘V passe par le menu Édition → Coller.
+let mainMenu = NSMenu()
+let appItem = NSMenuItem()
+appItem.submenu = NSMenu(title: "Cible")
+mainMenu.addItem(appItem)
+let editItem = NSMenuItem()
+let editMenu = NSMenu(title: "Édition")
+editMenu.addItem(withTitle: "Coller", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+editItem.submenu = editMenu
+mainMenu.addItem(editItem)
+app.mainMenu = mainMenu
 let delegate = Delegate()
 app.delegate = delegate
 app.run()
