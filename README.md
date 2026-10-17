@@ -2,17 +2,27 @@
 
 Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](https://hluk.github.io/CopyQ/), écrit en Rust avec [egui](https://github.com/emilk/egui).
 
-## Fonctionnalités (v0.1 — MVP)
+## Fonctionnalités
 
 - Enregistre automatiquement tout texte copié (500 derniers éléments, doublons remontés en tête)
-- Historique persistant : `~/Library/Application Support/com.amine.copyq-rs/history.json`
+- Historique persistant dans une base [Turso](https://github.com/tursodatabase/turso) (SQLite réécrit en Rust) : `~/Library/Application Support/com.amine.copyq-rs/history.db` — l'ancien `history.json` est importé automatiquement
 - Recherche instantanée (tous les mots, insensible à la casse)
 - Clic ou **Entrée** : remet l'élément dans le presse-papiers et masque la fenêtre → il suffit de faire ⌘V
 - Navigation **↑ / ↓**, **⌘⌫** supprime l'élément sélectionné, **Échap** vide la recherche puis masque
 - **⌘⇧Z** (raccourci global) affiche l'historique, ou le masque s'il est déjà au premier plan
 - Icône dans la barre des menus (Afficher l'historique / Quitter) ; fermer la fenêtre la masque seulement
 - Thème moderne clair / sombre qui suit le réglage de macOS
-- Interrupteur **Pause** pour ne pas enregistrer ce que vous copiez (mots de passe…)
+- Interrupteur **Pause** pour ne pas enregistrer ce que vous copiez
+- Interrupteur **Au démarrage** (ouverture de session ; nécessite l'app empaquetée `.app`)
+
+## Robustesse
+
+- **Économe** : seul le compteur de changements du presse-papiers est consulté (toutes les 300 ms) ; le contenu n'est lu que lorsqu'il change
+- **Mots de passe ignorés** : les copies marquées confidentielles ou temporaires (1Password, Bitwarden, trousseau… — convention nspasteboard.org) ne sont ni lues ni enregistrées
+- **Pas de plantage en cascade** : verrous récupérables, panics consignés
+- **Journal** : `~/Library/Logs/copyq-rs/copyq-rs.log`
+- **Base dans un thread dédié** : l'interface n'attend jamais le disque ; tout est écrit avant de quitter
+- **Instance unique** : relancer l'app affiche la fenêtre déjà ouverte
 
 ## Lancer
 
@@ -31,14 +41,22 @@ open target/release/bundle/osx/CopyQ-rs.app
 
 Tests : `cargo test`
 
+Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de bout en bout avec le vrai presse-papiers (`ci/e2e.py`), auto-test de l'app empaquetée (`ci/bundle_selftest.sh`) et captures d'écran clair/sombre. Résultats sur la branche `ci-results`.
+
 ## Architecture
 
 | Fichier | Rôle |
 |---|---|
 | `src/main.rs` | Démarrage, fenêtre eframe |
-| `src/history.rs` | Modèle de l'historique, recherche, sauvegarde JSON (testé) |
-| `src/clipboard.rs` | Thread qui interroge le presse-papiers toutes les 400 ms |
+| `src/history.rs` | Historique en mémoire, recherche, import de l'ancien JSON |
+| `src/storage.rs` | Base Turso dans un thread dédié (seul module à faire du SQL) |
+| `src/clipboard.rs` | Surveillance du presse-papiers (compteur de changements) |
+| `src/pasteboard.rs` | Accès NSPasteboard : compteur, types, filtre des mots de passe |
+| `src/logging.rs` | Journal fichier, gestion des panics, verrous récupérables |
+| `src/single_instance.rs` | Instance unique (verrou + socket Unix) |
+| `src/login_item.rs` | Ouverture au démarrage (`SMAppService`) |
 | `src/app.rs` | Interface egui et raccourcis clavier |
+| `src/icons.rs` | Icônes vectorielles |
 | `src/theme.rs` | Thème clair / sombre (suit macOS), police SF Pro |
 | `src/hotkey.rs` | Raccourci global ⌘⇧Z |
 | `src/keyboard.rs` | Trouve la touche « Z » selon la disposition (AZERTY, QWERTZ…) |
