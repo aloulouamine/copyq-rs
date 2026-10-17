@@ -44,6 +44,9 @@ jobs:
       - name: Tests de bout en bout (vrai presse-papiers macOS)
         run: python3 ci/e2e.py ./target/release/copyq-rs 2>&1 | tee e2e.log
 
+      - name: App empaquetée — lancement au démarrage
+        run: bash ci/bundle_selftest.sh 2>&1 | tee login.log
+
       - name: Historique de démo
         run: python3 ci/seed_history.py "$HOME/Library/Application Support/com.amine.copyq-rs/history.json"
 
@@ -63,7 +66,7 @@ jobs:
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b ci-results
           git config user.name "github-actions"

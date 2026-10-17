@@ -7,6 +7,7 @@ mod hotkey;
 mod icons;
 mod keyboard;
 mod logging;
+mod login_item;
 mod pasteboard;
 mod platform;
 mod single_instance;
@@ -18,7 +19,11 @@ use eframe::egui;
 use std::sync::{Arc, Mutex};
 
 fn main() -> eframe::Result<()> {
+    if std::env::args().any(|a| a == "--login-item-selftest") {
+        std::process::exit(login_item::selftest());
+    }
     logging::init();
+    log::info!("lancement au démarrage : {:?}", login_item::status());
 
     let instance = match single_instance::acquire(&history::data_dir()) {
         single_instance::Instance::Primary(p) => p,

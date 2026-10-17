@@ -90,6 +90,7 @@ try:
     content = open(logfile).read() if os.path.exists(logfile) else ""
     check("le journal fichier est écrit", "démarré" in content and "Copie ignorée" in content)
     check("la 1re instance a reçu la demande d'affichage", "nouveau lancement détecté" in content)
+    check("binaire nu : lancement au démarrage signalé indisponible", "lancement au démarrage : Unavailable" in content)
 finally:
     app.terminate()
     app.wait(timeout=10)

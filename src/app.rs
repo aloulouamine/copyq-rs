@@ -3,7 +3,7 @@
 use crate::history::{self, History};
 use crate::logging::LockExt;
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, icons, platform, tray};
+use crate::{clipboard, hotkey, icons, login_item, platform, tray};
 use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
@@ -90,6 +90,7 @@ pub struct CopyApp {
     scroll_to_selected: bool,
     hide_after_copy: bool,
     confirm_clear: bool,
+    login_status: login_item::Status,
     toast: Option<Toast>,
     /// (version de l'historique, requête) → lignes.
     cache: Option<(u64, String, Arc<Vec<Row>>)>,
@@ -135,6 +136,7 @@ impl CopyApp {
             selected: 0,
             scroll_to_selected: false,
             hide_after_copy: true,
+            login_status: login_item::status(),
             confirm_clear: false,
             toast,
             cache: None,
@@ -204,6 +206,25 @@ impl CopyApp {
     fn clear_all(&mut self) {
         self.history.lock_safe().clear();
         self.selected = 0;
+    }
+
+    fn set_login_item(&mut self, enabled: bool) {
+        match login_item::set_enabled(enabled) {
+            Ok(()) => {
+                self.login_status = login_item::status();
+                match self.login_status {
+                    login_item::Status::RequiresApproval => self.notify_error(
+                        "À valider dans Réglages → Général → Ouverture",
+                    ),
+                    login_item::Status::Enabled => self.notify("Ouverture au démarrage activée"),
+                    _ => self.notify("Ouverture au démarrage désactivée"),
+                }
+            }
+            Err(e) => {
+                log::warn!("lancement au démarrage : {e}");
+                self.notify_error(format!("Impossible : {e}"));
+            }
+        }
     }
 
     fn notify(&mut self, msg: impl Into<String>) {
@@ -366,6 +387,25 @@ impl eframe::App for CopyApp {
                     }
                     ui.add_space(10.0);
                     toggle(ui, &mut self.hide_after_copy, "Masquer après copie", &p);
+                    ui.add_space(10.0);
+                    let available = self.login_status != login_item::Status::Unavailable;
+                    let mut on = matches!(
+                        self.login_status,
+                        login_item::Status::Enabled | login_item::Status::RequiresApproval
+                    );
+                    let resp = ui
+                        .add_enabled_ui(available, |ui| toggle(ui, &mut on, "Au démarrage", &p))
+                        .inner;
+                    let resp = if available {
+                        resp.on_hover_text("Ouvrir CopyQ-rs à l'ouverture de session")
+                    } else {
+                        resp.on_disabled_hover_text(
+                            "Disponible une fois l'app installée en tant qu'application (.app)",
+                        )
+                    };
+                    if available && resp.changed() {
+                        self.set_login_item(on);
+                    }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if self.confirm_clear {
