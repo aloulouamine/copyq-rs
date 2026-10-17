@@ -9,6 +9,7 @@ mod keyboard;
 mod logging;
 mod pasteboard;
 mod platform;
+mod storage;
 mod theme;
 mod tray;
 
@@ -17,7 +18,18 @@ use std::sync::{Arc, Mutex};
 
 fn main() -> eframe::Result<()> {
     logging::init();
-    let history = Arc::new(Mutex::new(history::History::load(history::default_path())));
+    let history = match storage::Store::open(
+        storage::default_db_path(),
+        Some(history::legacy_json_path()),
+    ) {
+        Ok((store, items)) => history::History::with_store(store, items),
+        Err(e) => {
+            // L'app reste utilisable (historique en mémoire seulement) plutôt que de planter.
+            log::error!("base indisponible, historique non sauvegardé : {e}");
+            history::History::default()
+        }
+    };
+    let history = Arc::new(Mutex::new(history));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

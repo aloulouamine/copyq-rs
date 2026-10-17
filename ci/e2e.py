@@ -1,6 +1,6 @@
 """Tests de bout en bout sur un vrai Mac (CI) : lance l'app, copie du texte,
 vérifie ce qui est enregistré. Usage : python3 ci/e2e.py <binaire>"""
-import json, os, subprocess, sys, time, uuid
+import os, sqlite3, subprocess, sys, time, uuid
 
 BIN = sys.argv[1]
 DATA = os.path.expanduser("~/Library/Application Support/com.amine.copyq-rs")
@@ -8,11 +8,15 @@ os.makedirs(DATA, exist_ok=True)
 
 
 def stored_texts():
-    path = os.path.join(DATA, "history.json")
+    """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité)."""
+    path = os.path.join(DATA, "history.db")
     if not os.path.exists(path):
         return []
-    with open(path) as f:
-        return [it["text"] for it in json.load(f)["items"]]
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+    try:
+        return [r[0] for r in con.execute("SELECT text FROM items ORDER BY id DESC")]
+    finally:
+        con.close()
 
 
 def pbcopy(text):
@@ -39,11 +43,18 @@ def check(name, cond):
         failures.append(name)
 
 
+subprocess.run([sys.executable, "ci/seed_history.py", os.path.join(DATA, "history.json")], check=True)
+
 log = open("e2e-app.log", "w")
 app = subprocess.Popen([BIN], stdout=log, stderr=subprocess.STDOUT)
 time.sleep(5)
 try:
     check("l'app tourne", app.poll() is None)
+
+    texts = stored_texts()
+    check("l'ancien history.json est importé dans la base (10 éléments)", len(texts) == 10)
+    check("l'ordre est conservé à l'import", bool(texts) and texts[0] == "https://github.com/emilk/egui")
+    check("le JSON est renommé après import", os.path.exists(os.path.join(DATA, "history.json.migrated")))
 
     normal = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(normal)
@@ -68,6 +79,14 @@ finally:
     app.terminate()
     app.wait(timeout=10)
     log.close()
+
+# Relance : les données doivent survivre au redémarrage.
+app = subprocess.Popen([BIN], stdout=open("e2e-app2.log", "w"), stderr=subprocess.STDOUT)
+time.sleep(4)
+app.terminate()
+app.wait(timeout=10)
+restart_log = open("e2e-app2.log").read()
+check("au redémarrage, la base est relue (12 éléments)", "base ouverte : 12 éléments" in restart_log)
 
 print(open("e2e-app.log").read())
 sys.exit(1 if failures else 0)

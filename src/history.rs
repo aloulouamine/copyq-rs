@@ -1,9 +1,10 @@
-//! Historique du presse-papiers : stockage, recherche et persistance JSON.
+//! Historique du presse-papiers en mémoire : ajout, recherche, suppression.
+//! Chaque modification est répercutée en base via `storage::Store`.
 
+use crate::storage::Store;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Nombre maximal d'éléments conservés.
@@ -18,14 +19,16 @@ pub struct Item {
     pub copied_at: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct History {
     items: Vec<Item>,
-    path: Option<PathBuf>,
+    /// Absent dans les tests unitaires : historique purement en mémoire.
+    store: Option<Store>,
     /// Incrémenté à chaque modification (permet à l'interface de mettre en cache).
     version: u64,
 }
 
+/// Ancien format (v0.1) : un fichier JSON, importé une fois en base.
 #[derive(Serialize, Deserialize)]
 struct OnDisk {
     version: u32,
@@ -33,16 +36,11 @@ struct OnDisk {
 }
 
 impl History {
-    /// Charge l'historique depuis `path` (vide si le fichier n'existe pas ou est illisible).
-    pub fn load(path: PathBuf) -> Self {
-        let items = fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<OnDisk>(&s).ok())
-            .map(|d| d.items)
-            .unwrap_or_default();
+    /// Historique adossé à une base (éléments déjà chargés, du plus récent au plus ancien).
+    pub fn with_store(store: Store, items: Vec<Item>) -> Self {
         Self {
             items,
-            path: Some(path),
+            store: Some(store),
             version: 0,
         }
     }
@@ -80,8 +78,17 @@ impl History {
                         copied_at: now_secs(),
                     },
                 );
-                self.items.truncate(MAX_ITEMS);
+                if self.items.len() > MAX_ITEMS {
+                    for evicted in self.items.split_off(MAX_ITEMS) {
+                        if let Some(store) = &self.store {
+                            store.delete(&evicted.text);
+                        }
+                    }
+                }
             }
+        }
+        if let Some(store) = &self.store {
+            store.upsert(&self.items[0]);
         }
         self.version += 1;
         true
@@ -89,7 +96,10 @@ impl History {
 
     pub fn remove(&mut self, index: usize) -> Option<Item> {
         let removed = (index < self.items.len()).then(|| self.items.remove(index));
-        if removed.is_some() {
+        if let Some(item) = &removed {
+            if let Some(store) = &self.store {
+                store.delete(&item.text);
+            }
             self.version += 1;
         }
         removed
@@ -97,6 +107,9 @@ impl History {
 
     pub fn clear(&mut self) {
         self.items.clear();
+        if let Some(store) = &self.store {
+            store.clear();
+        }
         self.version += 1;
     }
 
@@ -117,24 +130,12 @@ impl History {
             .map(|(i, _)| i)
             .collect()
     }
+}
 
-    /// Écrit l'historique sur disque (écriture atomique via fichier temporaire).
-    pub fn save(&self) -> io::Result<()> {
-        let Some(path) = &self.path else {
-            return Ok(());
-        };
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        let data = OnDisk {
-            version: 1,
-            items: self.items.clone(),
-        };
-        let json = serde_json::to_string(&data).map_err(io::Error::other)?;
-        let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, json)?;
-        fs::rename(&tmp, path)
-    }
+/// Lit l'ancien fichier `history.json` (None s'il est absent ou illisible).
+pub fn read_legacy_json(path: &Path) -> Option<Vec<Item>> {
+    let s = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<OnDisk>(&s).ok().map(|d| d.items)
 }
 
 pub fn now_secs() -> u64 {
@@ -166,11 +167,16 @@ pub fn preview(text: &str, max_chars: usize) -> String {
     out
 }
 
-/// Emplacement par défaut : ~/Library/Application Support/com.amine.copyq-rs/history.json sur macOS.
-pub fn default_path() -> PathBuf {
+/// Dossier des données : ~/Library/Application Support/com.amine.copyq-rs sur macOS.
+pub fn data_dir() -> PathBuf {
     directories::ProjectDirs::from("com", "amine", "copyq-rs")
-        .map(|d| d.data_dir().join("history.json"))
-        .unwrap_or_else(|| PathBuf::from("history.json"))
+        .map(|d| d.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Ancien fichier JSON de la v0.1, importé automatiquement s'il existe.
+pub fn legacy_json_path() -> PathBuf {
+    data_dir().join("history.json")
 }
 
 #[cfg(test)]
@@ -232,15 +238,25 @@ mod tests {
     }
 
     #[test]
-    fn save_and_load_roundtrip() {
-        let dir = std::env::temp_dir().join(format!("copyq-rs-test-{}", std::process::id()));
-        let path = dir.join("history.json");
-        let mut h = History::load(path.clone());
-        h.push("un".into());
-        h.push("deux".into());
-        h.save().unwrap();
-        let loaded = History::load(path);
-        assert_eq!(loaded.items(), h.items());
+    fn history_changes_reach_the_database() {
+        use std::time::Duration;
+        let dir = std::env::temp_dir().join(format!("copyq-rs-hist-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let db = dir.join("h.db");
+        {
+            let (store, items) = Store::open(db.clone(), None).unwrap();
+            let mut h = History::with_store(store.clone(), items);
+            h.push("un".into());
+            h.push("deux".into());
+            h.push("trois".into());
+            h.push("un".into()); // remonte en tête
+            h.remove(1); // supprime « trois »
+            assert!(store.close(Duration::from_secs(5)));
+        }
+        let (store, items) = Store::open(db, None).unwrap();
+        let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(texts, vec!["un", "deux"]);
+        store.close(Duration::from_secs(5));
         let _ = fs::remove_dir_all(dir);
     }
 

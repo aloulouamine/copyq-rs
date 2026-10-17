@@ -89,16 +89,7 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
                     }
                     last_text = Some(text.clone());
                 }
-                let changed = {
-                    let mut h = history.lock_safe();
-                    let changed = h.push(text);
-                    if changed {
-                        if let Err(e) = h.save() {
-                            log::error!("Échec de la sauvegarde : {e}");
-                        }
-                    }
-                    changed
-                };
+                let changed = history.lock_safe().push(text);
                 if changed {
                     ctx.request_repaint();
                 }

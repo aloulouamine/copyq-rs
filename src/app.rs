@@ -187,12 +187,7 @@ impl CopyApp {
             self.notify_error(format!("Échec de la copie : {e}"));
             return;
         }
-        {
-            let mut h = self.history.lock_safe();
-            if h.push(text) {
-                let _ = h.save();
-            }
-        }
+        self.history.lock_safe().push(text);
         self.selected = 0;
         self.scroll_to_selected = true;
         self.notify("Copié dans le presse-papiers");
@@ -203,16 +198,11 @@ impl CopyApp {
     }
 
     fn delete_item(&mut self, index: usize) {
-        let mut h = self.history.lock_safe();
-        if h.remove(index).is_some() {
-            let _ = h.save();
-        }
+        self.history.lock_safe().remove(index);
     }
 
     fn clear_all(&mut self) {
-        let mut h = self.history.lock_safe();
-        h.clear();
-        let _ = h.save();
+        self.history.lock_safe().clear();
         self.selected = 0;
     }
 

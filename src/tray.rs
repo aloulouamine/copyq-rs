@@ -24,7 +24,9 @@ pub fn create(ctx: &egui::Context) -> Result<TrayIcon, Box<dyn Error>> {
         if event.id == show_id {
             platform::show_window(&ctx);
         } else if event.id == quit_id {
-            // L'historique est sauvegardé à chaque modification : on peut sortir directement.
+            // Termine les écritures en attente avant de quitter.
+            crate::storage::close_global();
+            log::info!("fermeture demandée depuis la barre des menus");
             std::process::exit(0);
         }
     }));

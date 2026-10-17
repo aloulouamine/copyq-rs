@@ -17,6 +17,10 @@ samples = [
 items = [{"text": t, "copied_at": now - age} for t, age in samples]
 path = sys.argv[1]
 os.makedirs(os.path.dirname(path), exist_ok=True)
+# Repartir d'une base vide : le JSON sera importé au lancement (test de migration).
+import glob
+for f in glob.glob(os.path.join(os.path.dirname(path), "history.db*")) + glob.glob(path + ".migrated"):
+    os.remove(f)
 with open(path, "w") as f:
     json.dump({"version": 1, "items": items}, f, ensure_ascii=False)
 print(f"{len(items)} éléments écrits dans {path}")
