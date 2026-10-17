@@ -1,0 +1,55 @@
+name: Vérification rapide (branches de travail)
+
+# Compilation + Clippy seulement, pour itérer vite sur une branche ;
+# la chaîne complète (tests, e2e, captures) tourne sur main.
+on:
+  push:
+    branches-ignore: [main, ci-results, ci-audit, ci-check]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust stable
+        run: rustup update stable && rustup default stable && rustup component add clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: check-${{ github.ref_name }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            check-${{ github.ref_name }}-
+            macos-cargo-
+      - name: Clippy
+        id: clippy
+        continue-on-error: true
+        run: cargo clippy --all-targets -- -D warnings > check.log 2>&1
+      - name: Tests
+        id: tests
+        if: steps.clippy.outcome == 'success'
+        continue-on-error: true
+        run: cargo test 2>&1 | tail -40 > tests.log
+      - name: Publier (branche ci-check)
+        if: always()
+        run: |
+          mkdir -p /tmp/out && cp check.log tests.log Cargo.lock /tmp/out/ 2>/dev/null || true
+          cd /tmp/out
+          echo "${GITHUB_SHA} clippy=${{ steps.clippy.outcome }} tests=${{ steps.tests.outcome }}" > commit.txt
+          git init -q -b ci-check
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A && git commit -qm "Vérification ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-check
