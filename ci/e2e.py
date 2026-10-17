@@ -157,6 +157,11 @@ try:
     check("réglage relu au démarrage", "save_passwords: true" in log3)
     check("pas d'erreur de trousseau", "chiffrement indisponible" not in log3)
 
+finally:
+    app.terminate()
+    app.wait(timeout=10)
+    os.remove(settings_path)
+
 # Relance : le mot de passe chiffré est relu et déchiffré (clé du trousseau).
 app = subprocess.Popen([BIN], stdout=open("e2e-app4.log", "w"), stderr=subprocess.STDOUT)
 time.sleep(4)
@@ -165,10 +170,6 @@ app.wait(timeout=10)
 log4 = open("e2e-app4.log").read()
 check("au redémarrage, les mots de passe chiffrés sont déchiffrés",
       "non déchiffrable" not in log4 and "chiffrement indisponible" not in log4)
-finally:
-    app.terminate()
-    app.wait(timeout=10)
-    os.remove(settings_path)
 
 print(open("e2e-app.log").read())
 sys.exit(1 if failures else 0)
