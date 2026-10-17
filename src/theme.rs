@@ -1,7 +1,7 @@
 //! Thème visuel moderne : palettes clair / sombre (suivant macOS), police système,
 //! coins arrondis, espacements généreux.
 
-use eframe::egui::{self, Color32, FontFamily, FontId, Rounding, Stroke, TextStyle};
+use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle};
 
 /// Couleurs utilisées par l'interface (dessin personnalisé des lignes, puces…).
 #[derive(Clone, Copy)]
@@ -48,7 +48,7 @@ pub const LIGHT: Palette = Palette {
 };
 
 pub fn palette_ctx(ctx: &egui::Context) -> Palette {
-    if ctx.style().visuals.dark_mode {
+    if ctx.global_style().visuals.dark_mode {
         DARK
     } else {
         LIGHT
@@ -70,15 +70,15 @@ pub fn install(ctx: &egui::Context) {
 }
 
 fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
-    let r = Rounding::same(8.0);
+    let r = CornerRadius::same(8);
 
     v.panel_fill = p.bg;
     v.window_fill = p.surface;
     v.extreme_bg_color = p.surface;
     v.faint_bg_color = p.surface;
-    v.window_rounding = Rounding::same(12.0);
+    v.window_corner_radius = CornerRadius::same(12);
     v.window_stroke = Stroke::new(1.0_f32, p.border);
-    v.menu_rounding = r;
+    v.menu_corner_radius = r;
     v.hyperlink_color = p.accent;
     v.override_text_color = None;
     v.selection.bg_fill = p.accent.gamma_multiply(0.35);
@@ -92,7 +92,7 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
         (&mut v.widgets.active, p.surface_hover),
         (&mut v.widgets.open, p.surface_hover),
     ] {
-        w.rounding = r;
+        w.corner_radius = r;
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
         w.bg_stroke = Stroke::NONE;
@@ -147,9 +147,10 @@ fn install_fonts(ctx: &egui::Context) {
         return;
     };
     let mut fonts = egui::FontDefinitions::default();
-    fonts
-        .font_data
-        .insert("system".to_owned(), egui::FontData::from_owned(bytes));
+    fonts.font_data.insert(
+        "system".to_owned(),
+        std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+    );
     if let Some(family) = fonts.families.get_mut(&FontFamily::Proportional) {
         family.insert(0, "system".to_owned());
     }

@@ -5,7 +5,7 @@ use crate::history::{self, History, ItemKind};
 use crate::logging::LockExt;
 use crate::theme::Palette;
 use crate::{icons, media};
-use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, Ui};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui};
 use std::collections::HashSet;
 use std::sync::Mutex;
 use unicode_normalization::UnicodeNormalization;
@@ -156,7 +156,12 @@ pub(super) fn row_ui(
             Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
             Color32::WHITE,
         );
-        painter.rect_stroke(frame, 6.0, Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            frame,
+            6.0,
+            Stroke::new(1.0_f32, p.border),
+            StrokeKind::Inside,
+        );
         frame.right() + 12.0
     } else {
         painter.rect_filled(
@@ -164,7 +169,12 @@ pub(super) fn row_ui(
             8.0,
             if selected { p.surface } else { p.surface_hover },
         );
-        painter.rect_stroke(tile, 8.0, Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            tile,
+            8.0,
+            Stroke::new(1.0_f32, p.border),
+            StrokeKind::Inside,
+        );
         row.kind.paint(
             &painter,
             tile.center(),

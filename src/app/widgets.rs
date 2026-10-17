@@ -2,8 +2,8 @@
 
 use crate::theme::Palette;
 use eframe::egui::{
-    self, text::LayoutJob, text::TextWrapping, Color32, FontId, Frame, Margin, RichText, Rounding,
-    Sense, Stroke, Ui,
+    self, text::LayoutJob, text::TextWrapping, Color32, CornerRadius, FontId, Frame, Margin,
+    RichText, Sense, Stroke, Ui,
 };
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ pub(super) fn single_line(
         egui::TextFormat::simple(FontId::proportional(size), color),
     );
     job.wrap = TextWrapping::truncate_at_width(max_width);
-    ui.fonts(|f| f.layout_job(job))
+    ui.painter().layout_job(job)
 }
 
 pub(super) fn empty_state(ui: &mut Ui, history_empty: bool, query: &str, p: &Palette) {
@@ -66,7 +66,7 @@ pub(super) fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> eg
     let track = lerp_color(off_color, p.accent, t);
     let radius = rect.height() / 2.0;
     ui.painter()
-        .rect_filled(rect, Rounding::same(radius), track);
+        .rect_filled(rect, CornerRadius::same(radius as u8), track);
     let x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), t);
     ui.painter()
         .circle_filled(egui::pos2(x, rect.center().y), radius - 2.5, Color32::WHITE);
@@ -82,17 +82,17 @@ pub(super) fn ghost_button(ui: &mut Ui, text: &str, color: Color32, p: &Palette)
     ui.add(
         egui::Button::new(RichText::new(text).size(12.5).color(color))
             .fill(Color32::TRANSPARENT)
-            .rounding(7.0),
+            .corner_radius(7.0),
     )
 }
 
 /// Petite touche de clavier stylisée.
 pub(super) fn kbd(ui: &mut Ui, key: &str, p: &Palette) {
-    Frame::none()
+    Frame::NONE
         .fill(p.surface)
         .stroke(Stroke::new(1.0_f32, p.border))
-        .rounding(4.0)
-        .inner_margin(Margin::symmetric(5.0, 1.0))
+        .corner_radius(4.0)
+        .inner_margin(Margin::symmetric(5, 1))
         .show(ui, |ui| {
             ui.label(RichText::new(key).size(11.0).color(p.text_muted));
         });

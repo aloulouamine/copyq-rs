@@ -5,7 +5,7 @@ edition = "2021"
 description = "Gestionnaire d'historique du presse-papiers inspiré de CopyQ"
 
 [dependencies]
-eframe = "0.29"
+eframe = "0.37"
 arboard = "3"
 tray-icon = "0.19"
 global-hotkey = "0.6"

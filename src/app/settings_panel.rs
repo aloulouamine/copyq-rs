@@ -34,7 +34,7 @@ impl CopyApp {
                         } else {
                             Color32::TRANSPARENT
                         })
-                        .rounding(6.0);
+                        .corner_radius(6.0);
                     if ui.add(button).clicked() {
                         self.settings_tab = tab;
                     }
@@ -171,7 +171,7 @@ impl CopyApp {
                 if pending {
                     let apply = egui::Button::new(RichText::new("Appliquer").color(Color32::WHITE))
                         .fill(p.accent)
-                        .rounding(7.0);
+                        .corner_radius(7.0);
                     if ui.add(apply).clicked() {
                         self.settings = draft.clone();
                         let removed = self.apply_limits();

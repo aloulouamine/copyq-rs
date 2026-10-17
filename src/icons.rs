@@ -1,7 +1,9 @@
 //! Petites icônes vectorielles dessinées à la main (traits fins, style « SF Symbols »).
 //! Les glyphes emoji d'egui sont trop petits et de styles disparates à cette taille.
 
-use eframe::egui::{pos2, vec2, Color32, Painter, Pos2, Rect, Rounding, Shape, Stroke};
+use eframe::egui::{
+    pos2, vec2, Color32, CornerRadius, Painter, Pos2, Rect, Shape, Stroke, StrokeKind,
+};
 
 const W: f32 = 1.4;
 
@@ -27,7 +29,7 @@ pub fn globe(p: &Painter, c: Pos2, color: Color32) {
 /// Dossier (chemins de fichiers).
 pub fn folder(p: &Painter, c: Pos2, color: Color32) {
     let body = Rect::from_center_size(pos2(c.x, c.y + 1.0), vec2(15.0, 10.5));
-    p.rect_stroke(body, Rounding::same(2.0), s(color));
+    p.rect_stroke(body, CornerRadius::same(2), s(color), StrokeKind::Inside);
     let tab = vec![
         pos2(body.left() + 0.5, body.top()),
         pos2(body.left() + 0.5, body.top() - 2.5),
@@ -40,7 +42,7 @@ pub fn folder(p: &Painter, c: Pos2, color: Color32) {
 /// Enveloppe (adresses e-mail).
 pub fn envelope(p: &Painter, c: Pos2, color: Color32) {
     let body = Rect::from_center_size(c, vec2(15.0, 11.0));
-    p.rect_stroke(body, Rounding::same(2.0), s(color));
+    p.rect_stroke(body, CornerRadius::same(2), s(color), StrokeKind::Inside);
     p.add(Shape::line(
         vec![
             pos2(body.left() + 1.0, body.top() + 1.5),
@@ -111,7 +113,7 @@ pub fn trash(p: &Painter, c: Pos2, color: Color32) {
 /// Cadenas (mots de passe enregistrés, affichés masqués).
 pub fn lock(p: &Painter, c: Pos2, color: Color32) {
     let body = Rect::from_center_size(pos2(c.x, c.y + 2.5), vec2(12.0, 9.0));
-    p.rect_stroke(body, Rounding::same(2.0), s(color));
+    p.rect_stroke(body, CornerRadius::same(2), s(color), StrokeKind::Inside);
     let r = 3.5;
     let base = body.top();
     let arc: Vec<Pos2> = (0..=12)
@@ -130,7 +132,7 @@ pub fn lock(p: &Painter, c: Pos2, color: Color32) {
 /// Photo (image sans vignette disponible).
 pub fn photo(p: &Painter, c: Pos2, color: Color32) {
     let frame = Rect::from_center_size(c, vec2(15.0, 12.0));
-    p.rect_stroke(frame, Rounding::same(2.0), s(color));
+    p.rect_stroke(frame, CornerRadius::same(2), s(color), StrokeKind::Inside);
     p.circle_filled(pos2(frame.left() + 4.5, frame.top() + 4.0), 1.4, color);
     p.add(Shape::line(
         vec![

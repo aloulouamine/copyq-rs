@@ -339,7 +339,8 @@ struct Pending {
 }
 
 impl eframe::App for CopyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
         self.housekeeping(ctx);
 
         let p = theme::palette_ctx(ctx);
@@ -350,9 +351,9 @@ impl eframe::App for CopyApp {
         }
 
         let mut pending = self.handle_keys(ctx, &rows);
-        self.header_ui(ctx, &p, rows.len(), total);
-        self.footer_ui(ctx, &p, total);
-        self.list_ui(ctx, &p, &rows, total, &mut pending);
+        self.header_ui(ui, ctx, &p, rows.len(), total);
+        self.footer_ui(ui, &p, total);
+        self.list_ui(ui, ctx, &p, &rows, total, &mut pending);
         self.show_toast(ctx, &p);
 
         if let Some(i) = pending.delete {
@@ -382,7 +383,7 @@ impl CopyApp {
         }
         // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
         if std::mem::take(&mut self.open_settings_on_start) {
-            ctx.memory_mut(|m| m.open_popup(egui::Id::new(SETTINGS_POPUP)));
+            egui::Popup::open_id(ctx, egui::Id::new(SETTINGS_POPUP));
         }
         // Fermer la fenêtre = la masquer ; l'application reste dans la barre des menus.
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -427,16 +428,23 @@ impl CopyApp {
     }
 
     /// En-tête : zone déplaçable + barre de recherche.
-    fn header_ui(&mut self, ctx: &egui::Context, p: &Palette, shown: usize, total: usize) {
-        egui::TopBottomPanel::top("header")
+    fn header_ui(
+        &mut self,
+        root: &mut Ui,
+        ctx: &egui::Context,
+        p: &Palette,
+        shown: usize,
+        total: usize,
+    ) {
+        egui::Panel::top("header")
             .show_separator_line(false)
-            .frame(Frame::none().fill(p.bg).inner_margin(Margin {
-                left: 14.0,
-                right: 14.0,
-                top: 0.0,
-                bottom: 10.0,
+            .frame(Frame::NONE.fill(p.bg).inner_margin(Margin {
+                left: 14,
+                right: 14,
+                top: 0,
+                bottom: 10,
             }))
-            .show(ctx, |ui| {
+            .show(root, |ui| {
                 let (strip, drag) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), TITLEBAR_HEIGHT),
                     Sense::click_and_drag(),
@@ -453,11 +461,11 @@ impl CopyApp {
                 );
                 ui.add_space(4.0);
 
-                Frame::none()
+                Frame::NONE
                     .fill(p.surface)
                     .stroke(Stroke::new(1.0_f32, p.border))
-                    .rounding(10.0)
-                    .inner_margin(Margin::symmetric(12.0, 9.0))
+                    .corner_radius(10.0)
+                    .inner_margin(Margin::symmetric(12, 9))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| self.search_field(ctx, ui, p, shown, total));
                     });
@@ -500,16 +508,16 @@ impl CopyApp {
     }
 
     /// Pied de page : pause, réglages, effacement, rappel des raccourcis.
-    fn footer_ui(&mut self, ctx: &egui::Context, p: &Palette, total: usize) {
-        egui::TopBottomPanel::bottom("footer")
+    fn footer_ui(&mut self, root: &mut Ui, p: &Palette, total: usize) {
+        egui::Panel::bottom("footer")
             .show_separator_line(false)
-            .frame(Frame::none().fill(p.bg).inner_margin(Margin {
-                left: 14.0,
-                right: 14.0,
-                top: 10.0,
-                bottom: 10.0,
+            .frame(Frame::NONE.fill(p.bg).inner_margin(Margin {
+                left: 14,
+                right: 14,
+                top: 10,
+                bottom: 10,
             }))
-            .show(ctx, |ui| {
+            .show(root, |ui| {
                 let r = ui.clip_rect();
                 ui.painter()
                     .hline(r.x_range(), r.top(), Stroke::new(1.0_f32, p.border));
@@ -538,7 +546,7 @@ impl CopyApp {
             }
             let confirm = egui::Button::new(RichText::new("Tout supprimer").color(Color32::WHITE))
                 .fill(p.danger)
-                .rounding(7.0);
+                .corner_radius(7.0);
             if ui.add(confirm).clicked() {
                 self.clear_all();
                 self.confirm_clear = false;
@@ -547,18 +555,11 @@ impl CopyApp {
             self.confirm_clear = true;
         }
         let button = ghost_button(ui, "Réglages", p.text_muted, p);
-        let popup_id = egui::Id::new(SETTINGS_POPUP);
-        if button.clicked() {
-            ui.memory_mut(|m| m.toggle_popup(popup_id));
-        }
-        egui::popup::popup_above_or_below_widget(
-            ui,
-            popup_id,
-            &button,
-            egui::AboveOrBelow::Above,
-            egui::popup::PopupCloseBehavior::CloseOnClickOutside,
-            |ui| self.settings_ui(ui, p),
-        );
+        egui::Popup::from_toggle_button_response(&button)
+            .id(egui::Id::new(SETTINGS_POPUP))
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .align(egui::RectAlign::TOP_END)
+            .show(|ui| self.settings_ui(ui, p));
     }
 
     fn shortcuts_ui(&self, ui: &mut Ui, p: &Palette) {
@@ -586,6 +587,7 @@ impl CopyApp {
     /// Liste des éléments (ou message si elle est vide).
     fn list_ui(
         &mut self,
+        root: &mut Ui,
         ctx: &egui::Context,
         p: &Palette,
         rows: &[Row],
@@ -593,12 +595,8 @@ impl CopyApp {
         pending: &mut Pending,
     ) {
         egui::CentralPanel::default()
-            .frame(
-                Frame::none()
-                    .fill(p.bg)
-                    .inner_margin(Margin::symmetric(8.0, 0.0)),
-            )
-            .show(ctx, |ui| {
+            .frame(Frame::NONE.fill(p.bg).inner_margin(Margin::symmetric(8, 0)))
+            .show(root, |ui| {
                 if rows.is_empty() {
                     empty_state(ui, total == 0, &self.query, p);
                     return;
@@ -666,10 +664,10 @@ impl CopyApp {
             .anchor(Align2::CENTER_BOTTOM, egui::vec2(0.0, -86.0))
             .interactable(false)
             .show(ctx, |ui| {
-                Frame::none()
+                Frame::NONE
                     .fill(p.text.gamma_multiply(alpha))
-                    .rounding(18.0)
-                    .inner_margin(Margin::symmetric(14.0, 7.0))
+                    .corner_radius(18.0)
+                    .inner_margin(Margin::symmetric(14, 7))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label(
