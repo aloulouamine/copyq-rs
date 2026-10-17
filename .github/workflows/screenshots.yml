@@ -1,0 +1,65 @@
+name: Build & captures macOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      # Compilation plus rapide en CI (pas de LTO).
+      CARGO_PROFILE_RELEASE_LTO: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust stable
+        run: rustup update stable && rustup default stable && rustc --version
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - name: Tests
+        run: cargo test --release 2>&1 | tee test.log
+
+      - name: Build
+        run: cargo build --release 2>&1 | tee build.log
+
+      - name: Historique de démo
+        run: python3 ci/seed_history.py "$HOME/Library/Application Support/com.amine.copyq-rs/history.json"
+
+      - name: Captures (clair puis sombre)
+        run: |
+          mkdir -p shots
+          for mode in light dark; do
+            if [ "$mode" = dark ]; then
+              defaults write -g AppleInterfaceStyle Dark
+            else
+              defaults delete -g AppleInterfaceStyle 2>/dev/null || true
+            fi
+            ./target/release/copyq-rs > "shots/run-$mode.log" 2>&1 &
+            PID=$!
+            sleep 8
+            screencapture -x "shots/$mode.png" || echo "screencapture a échoué"
+            kill $PID 2>/dev/null || true
+            sleep 2
+          done
+          ls -la shots
+
+      - name: Publier les captures et journaux
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures
+          path: |
+            shots/
+            build.log
+            test.log
