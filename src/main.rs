@@ -9,6 +9,7 @@ mod keyboard;
 mod logging;
 mod pasteboard;
 mod platform;
+mod single_instance;
 mod storage;
 mod theme;
 mod tray;
@@ -18,6 +19,12 @@ use std::sync::{Arc, Mutex};
 
 fn main() -> eframe::Result<()> {
     logging::init();
+
+    let instance = match single_instance::acquire(&history::data_dir()) {
+        single_instance::Instance::Primary(p) => p,
+        // Une autre instance tourne : elle vient d'afficher sa fenêtre.
+        single_instance::Instance::Secondary => return Ok(()),
+    };
     let history = match storage::Store::open(
         storage::default_db_path(),
         Some(history::legacy_json_path()),
@@ -47,6 +54,9 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "CopyQ-rs",
         options,
-        Box::new(move |cc| Ok(Box::new(app::CopyApp::new(cc, history)))),
+        Box::new(move |cc| {
+            instance.serve(cc.egui_ctx.clone());
+            Ok(Box::new(app::CopyApp::new(cc, history)))
+        }),
     )
 }

@@ -31,6 +31,19 @@ mod imp {
         }
     }
 
+    /// Réaffiche l'app depuis n'importe quel thread (AppKit exige le thread principal).
+    pub fn unhide_from_any_thread() {
+        unsafe {
+            let app = ns_app();
+            let _: () = msg_send![
+                app,
+                performSelectorOnMainThread: objc2::sel!(unhide:),
+                withObject: std::ptr::null_mut::<AnyObject>(),
+                waitUntilDone: false
+            ];
+        }
+    }
+
     /// Vrai si l'application est au premier plan et non masquée.
     pub fn is_frontmost() -> bool {
         unsafe {
@@ -70,4 +83,16 @@ pub fn toggle_window(ctx: &egui::Context) {
         return;
     }
     show_window(ctx);
+}
+
+/// Comme `show_window`, mais utilisable hors du thread principal (ex. socket
+/// d'instance unique). Le passage au premier plan est fait par egui (Focus).
+pub fn show_window_from_any_thread(ctx: &egui::Context) {
+    #[cfg(target_os = "macos")]
+    imp::unhide_from_any_thread();
+    #[cfg(not(target_os = "macos"))]
+    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+
+    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+    ctx.request_repaint();
 }

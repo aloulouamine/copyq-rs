@@ -79,9 +79,17 @@ try:
     texts = stored_texts()
     check("la copie suivante est bien enregistrée", again in texts)
     check("la plus récente est en tête", bool(texts) and texts[0] == again)
+    # Instance unique : un 2e lancement doit se terminer aussitôt, sans tuer le 1er.
+    second = subprocess.run([BIN], capture_output=True, text=True, timeout=20)
+    check("un 2e lancement se termine proprement", second.returncode == 0)
+    check("le 2e lancement prévient le 1er", "déjà lancé" in second.stderr)
+    time.sleep(1)
+    check("la 1re instance tourne toujours", app.poll() is None)
+
     logfile = os.path.expanduser("~/Library/Logs/copyq-rs/copyq-rs.log")
     content = open(logfile).read() if os.path.exists(logfile) else ""
     check("le journal fichier est écrit", "démarré" in content and "Copie ignorée" in content)
+    check("la 1re instance a reçu la demande d'affichage", "nouveau lancement détecté" in content)
 finally:
     app.terminate()
     app.wait(timeout=10)
