@@ -368,6 +368,7 @@ impl Db {
                 sensitive: row.sensitive,
                 kind: row.kind,
                 meta: row.meta,
+                ..Default::default()
             });
         }
         if upgraded > 0 {

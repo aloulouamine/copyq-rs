@@ -24,6 +24,8 @@ pub struct Settings {
     pub max_items: usize,
     pub max_images: usize,
     pub max_text_kb: usize,
+    /// Taille cumulée maximale des textes en mémoire (Mo).
+    pub max_total_mb: usize,
     pub max_image_mp: u32,
     /// 0 = conservation illimitée.
     pub retention_days: u32,
@@ -40,6 +42,7 @@ impl Default for Settings {
             max_items: crate::history::MAX_ITEMS,
             max_images: crate::history::MAX_IMAGES,
             max_text_kb: crate::history::MAX_ITEM_BYTES / 1000,
+            max_total_mb: crate::history::MAX_TOTAL_BYTES / 1_000_000,
             max_image_mp: (crate::media::MAX_PIXELS / 1_000_000) as u32,
             retention_days: 0,
         }
@@ -50,6 +53,7 @@ impl Default for Settings {
 pub const ITEMS_RANGE: std::ops::RangeInclusive<usize> = 10..=10_000;
 pub const IMAGES_RANGE: std::ops::RangeInclusive<usize> = 0..=500;
 pub const TEXT_KB_RANGE: std::ops::RangeInclusive<usize> = 1..=10_000;
+pub const TOTAL_MB_RANGE: std::ops::RangeInclusive<usize> = 10..=2_000;
 pub const IMAGE_MP_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
 pub const RETENTION_CHOICES: [(u32, &str); 6] = [
     (0, "Illimitée"),
@@ -67,6 +71,7 @@ impl Settings {
             max_items: self.max_items,
             max_images: self.max_images,
             max_text_bytes: self.max_text_kb * 1000,
+            max_total_bytes: self.max_total_mb * 1_000_000,
             retention_days: self.retention_days,
         }
     }
@@ -81,6 +86,7 @@ impl Settings {
         self.max_items = c(self.max_items, &ITEMS_RANGE);
         self.max_images = c(self.max_images, &IMAGES_RANGE);
         self.max_text_kb = c(self.max_text_kb, &TEXT_KB_RANGE);
+        self.max_total_mb = c(self.max_total_mb, &TOTAL_MB_RANGE);
         self.max_image_mp = self
             .max_image_mp
             .clamp(*IMAGE_MP_RANGE.start(), *IMAGE_MP_RANGE.end());
@@ -93,6 +99,7 @@ impl Settings {
             max_items: d.max_items,
             max_images: d.max_images,
             max_text_kb: d.max_text_kb,
+            max_total_mb: d.max_total_mb,
             max_image_mp: d.max_image_mp,
             retention_days: d.retention_days,
             ..self.clone()
@@ -159,6 +166,7 @@ mod tests {
         assert_eq!(s.max_items, 500);
         assert_eq!(s.max_images, 50);
         assert_eq!(s.max_text_kb, 1000);
+        assert_eq!(s.max_total_mb, 200);
         assert_eq!(s.max_image_mp, 50);
         assert_eq!(s.retention_days, 0);
         assert_eq!(s.limits(), crate::history::Limits::default());
@@ -199,6 +207,7 @@ mod tests {
             max_items: 42,
             max_images: 3,
             max_text_kb: 64,
+            max_total_mb: 50,
             max_image_mp: 12,
             retention_days: 30,
         };

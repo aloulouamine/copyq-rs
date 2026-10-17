@@ -3,6 +3,7 @@
 
 use crate::storage::Store;
 use serde::{Deserialize, Serialize};
+use std::cell::OnceCell;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,6 +15,8 @@ pub const MAX_ITEMS: usize = 500;
 pub const MAX_ITEM_BYTES: usize = 1_000_000;
 /// Nombre maximal d'images conservées (les plus anciennes sont supprimées).
 pub const MAX_IMAGES: usize = 50;
+/// Taille totale maximale des textes gardés en mémoire (les plus anciens sont supprimés).
+pub const MAX_TOTAL_BYTES: usize = 200_000_000;
 
 /// Nature d'un élément.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +62,55 @@ pub struct Item {
     /// Description affichée (ex. « 1280 × 720 · 245 Ko » pour une image).
     #[serde(default)]
     pub meta: String,
+    /// Valeurs dérivées du texte, calculées au premier besoin puis gardées
+    /// (jamais enregistrées). À vider si `text`, `kind` ou `meta` change.
+    #[serde(skip)]
+    pub cache: ItemCache,
+}
+
+/// Statistiques d'un texte, affichées sous chaque élément.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextStats {
+    pub lines: usize,
+    pub chars: usize,
+    /// Aucun espace ni retour à la ligne (une fois les bords retirés).
+    pub single_word: bool,
+}
+
+/// Cache paresseux d'un élément (sans effet sur l'égalité ni l'affichage de débogage).
+#[derive(Default)]
+pub struct ItemCache {
+    search: OnceCell<String>,
+    stats: OnceCell<TextStats>,
+}
+
+/// Une copie d'élément (envoi à la base, recopie…) repart d'un cache vide :
+/// inutile de dupliquer la clé de recherche, aussi longue que le texte.
+impl Clone for ItemCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for ItemCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for ItemCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ItemCache")
+    }
+}
+
+/// Forme de recherche : minuscules et sans accents (« École » → « ecole »).
+pub fn fold(s: &str) -> String {
+    use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
+    s.nfd()
+        .filter(|c| !is_combining_mark(*c))
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 impl Item {
@@ -69,6 +121,27 @@ impl Item {
             sensitive,
             ..Default::default()
         }
+    }
+
+    /// Texte de recherche (voir `fold`), calculé une seule fois.
+    pub fn search_key(&self) -> &str {
+        self.cache.search.get_or_init(|| match self.kind {
+            // Une image se retrouve en cherchant « image » ou ses dimensions.
+            ItemKind::Image => fold(&format!("image {}", self.meta)),
+            _ => fold(&self.text),
+        })
+    }
+
+    /// Nombre de lignes et de caractères, calculés une seule fois.
+    pub fn stats(&self) -> TextStats {
+        *self.cache.stats.get_or_init(|| {
+            let t = self.text.trim();
+            TextStats {
+                lines: t.lines().count().max(1),
+                chars: self.text.chars().count(),
+                single_word: !t.contains(char::is_whitespace),
+            }
+        })
     }
 
     /// Chemins d'un élément « fichiers ».
@@ -87,6 +160,8 @@ pub struct Limits {
     pub max_items: usize,
     pub max_images: usize,
     pub max_text_bytes: usize,
+    /// Taille cumulée maximale des textes (le plus récent est toujours gardé).
+    pub max_total_bytes: usize,
     /// 0 = conservation illimitée.
     pub retention_days: u32,
 }
@@ -97,6 +172,7 @@ impl Default for Limits {
             max_items: MAX_ITEMS,
             max_images: MAX_IMAGES,
             max_text_bytes: MAX_ITEM_BYTES,
+            max_total_bytes: MAX_TOTAL_BYTES,
             retention_days: 0,
         }
     }
@@ -208,8 +284,9 @@ impl History {
                 let mut item = self.items.remove(pos);
                 item.copied_at = now_secs();
                 item.sensitive |= new.sensitive;
-                if !new.meta.is_empty() {
+                if !new.meta.is_empty() && new.meta != item.meta {
                     item.meta = new.meta;
+                    item.cache = ItemCache::default();
                 }
                 self.items.insert(0, item);
             }
@@ -227,20 +304,17 @@ impl History {
         true
     }
 
-    /// Applique les limites de nombre (éléments, dont images).
+    /// Applique les limites de nombre (éléments, dont images) et de taille totale.
     fn evict(&mut self) {
         let mut evicted = Vec::new();
-        let mut images = 0;
+        let mut budget = Budget::new(self.limits);
         let mut kept = Vec::with_capacity(self.items.len());
         for item in std::mem::take(&mut self.items) {
-            let is_image = item.kind == ItemKind::Image;
-            if kept.len() >= self.limits.max_items || (is_image && images >= self.limits.max_images)
-            {
+            if budget.admit(&item) {
+                kept.push(item);
+            } else {
                 evicted.push(item);
-                continue;
             }
-            images += usize::from(is_image);
-            kept.push(item);
         }
         self.items = kept;
         if let Some(store) = &self.store {
@@ -271,6 +345,7 @@ impl History {
             return false;
         }
         self.items[index].sensitive = sensitive;
+        self.items[index].cache = ItemCache::default();
         if let Some(store) = &self.store {
             store.delete(&old);
             store.upsert(&self.items[index]);
@@ -336,10 +411,10 @@ impl History {
     }
 
     /// Indices des éléments correspondant à la requête : chaque mot doit apparaître
-    /// (insensible à la casse). Une requête vide renvoie tout. Les éléments masqués
-    /// (mots de passe) ne sont jamais retrouvés par la recherche.
+    /// (sans tenir compte de la casse ni des accents). Une requête vide renvoie tout.
+    /// Les éléments masqués (mots de passe) ne sont jamais retrouvés par la recherche.
     pub fn search(&self, query: &str) -> Vec<usize> {
-        let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        let words: Vec<String> = query.split_whitespace().map(fold).collect();
         self.items
             .iter()
             .enumerate()
@@ -350,15 +425,88 @@ impl History {
                 if it.sensitive {
                     return false;
                 }
-                let hay = match it.kind {
-                    // Une image se retrouve en cherchant « image » ou ses dimensions.
-                    ItemKind::Image => format!("image {}", it.meta).to_lowercase(),
-                    _ => it.text.to_lowercase(),
-                };
+                let hay = it.search_key();
                 words.iter().all(|w| hay.contains(w.as_str()))
             })
             .map(|(i, _)| i)
             .collect()
+    }
+
+    /// Vrai si l'image (par empreinte) est encore dans l'historique.
+    pub fn has_image(&self, hash: &str) -> bool {
+        self.items
+            .iter()
+            .any(|it| it.kind == ItemKind::Image && it.text == hash)
+    }
+
+    /// Met à jour la description d'une image (une fois son fichier écrit).
+    pub fn set_image_meta(&mut self, hash: &str, meta: String) -> bool {
+        let Some(item) = self
+            .items
+            .iter_mut()
+            .find(|it| it.kind == ItemKind::Image && it.text == hash)
+        else {
+            return false;
+        };
+        if item.meta == meta {
+            return false;
+        }
+        item.meta = meta;
+        item.cache = ItemCache::default();
+        if let Some(store) = &self.store {
+            store.upsert(item);
+        }
+        self.version += 1;
+        true
+    }
+
+    /// Retire une image (par empreinte), par exemple si son fichier n'a pas pu être écrit.
+    pub fn remove_image(&mut self, hash: &str) -> bool {
+        match self
+            .items
+            .iter()
+            .position(|it| it.kind == ItemKind::Image && it.text == hash)
+        {
+            Some(i) => self.remove(i).is_some(),
+            None => false,
+        }
+    }
+}
+
+/// Décompte des limites, du plus récent au plus ancien (partagé par `evict` et
+/// l'aperçu `would_remove`, pour qu'ils suivent exactement la même règle).
+struct Budget {
+    limits: Limits,
+    kept: usize,
+    images: usize,
+    bytes: usize,
+}
+
+impl Budget {
+    fn new(limits: Limits) -> Self {
+        Self {
+            limits,
+            kept: 0,
+            images: 0,
+            bytes: 0,
+        }
+    }
+
+    /// Vrai si l'élément tient encore dans les limites (il est alors compté).
+    fn admit(&mut self, item: &Item) -> bool {
+        let is_image = item.kind == ItemKind::Image;
+        let len = item.text.len();
+        let over_total = self.kept > 0 && self.bytes + len > self.limits.max_total_bytes;
+        if self.kept >= self.limits.max_items
+            || (is_image && self.images >= self.limits.max_images)
+            || over_total
+        {
+            return false;
+        }
+        self.kept += 1;
+        self.images += usize::from(is_image);
+        self.bytes += len;
+        true
     }
 }
 
@@ -370,19 +518,14 @@ fn cutoff(limits: Limits, now: u64) -> Option<u64> {
 /// Combien d'éléments resteraient avec ces limites (même règle que `evict` + `expire`).
 fn partition(items: &[Item], limits: Limits, now: u64) -> (usize, usize) {
     let cutoff = cutoff(limits, now);
-    let (mut kept, mut images) = (0, 0);
+    let mut budget = Budget::new(limits);
     for it in items {
         if cutoff.is_some_and(|c| it.copied_at < c) {
             continue;
         }
-        let is_image = it.kind == ItemKind::Image;
-        if kept >= limits.max_items || (is_image && images >= limits.max_images) {
-            continue;
-        }
-        images += usize::from(is_image);
-        kept += 1;
+        budget.admit(it);
     }
-    (kept, images)
+    (budget.kept, budget.images)
 }
 
 /// Lit l'ancien fichier `history.json` (None s'il est absent ou illisible).
@@ -414,7 +557,8 @@ pub fn preview(text: &str, max_chars: usize) -> String {
     let trimmed = text.trim();
     let first = trimmed.lines().next().unwrap_or("").trim();
     let mut out: String = first.chars().take(max_chars).collect();
-    if first.chars().count() > max_chars {
+    // `nth` plutôt que `count` : ne parcourt pas toute une ligne de plusieurs Mo.
+    if first.chars().nth(max_chars).is_some() {
         out.push('…');
     }
     out
@@ -630,6 +774,77 @@ mod tests {
         h.push("x".into());
         h.items[0].copied_at = 0;
         assert_eq!(h.set_limits(Limits::default(), now), 0);
+    }
+
+    #[test]
+    fn search_ignores_accents_and_case() {
+        let mut h = h();
+        h.push("École maternelle".into());
+        h.push("Crème brûlée".into());
+        h.push("ecole du soir".into());
+        assert_eq!(h.search("ecole").len(), 2);
+        assert_eq!(h.search("ÉCOLE").len(), 2);
+        assert_eq!(h.search("creme brulee"), vec![1]);
+        assert_eq!(h.search("brûl"), vec![1]);
+        assert_eq!(fold("Ça Va Été"), "ca va ete");
+    }
+
+    #[test]
+    fn cached_stats_and_search_key_follow_changes() {
+        let mut h = h();
+        h.push("deux\nlignes".into());
+        let s = h.items()[0].stats();
+        assert_eq!((s.lines, s.chars, s.single_word), (2, 11, false));
+        // Une copie part d'un cache vide (pas de clé dupliquée inutilement).
+        let copy = h.items()[0].clone();
+        assert_eq!(copy.stats(), s);
+        // Image : la description change une fois le fichier écrit.
+        h.push_item(Item {
+            text: "abc".into(),
+            kind: ItemKind::Image,
+            meta: "4 × 4".into(),
+            ..Default::default()
+        });
+        assert!(h.search("Ko").is_empty());
+        assert!(h.set_image_meta("abc", "4 × 4 · 2 Ko".into()));
+        assert_eq!(h.search("ko").len(), 1, "clé de recherche recalculée");
+        assert!(!h.set_image_meta("abc", "4 × 4 · 2 Ko".into()), "inchangé");
+        assert!(h.has_image("abc"));
+        assert!(h.remove_image("abc"));
+        assert!(!h.has_image("abc"));
+        assert!(!h.set_image_meta("abc", "x".into()));
+    }
+
+    #[test]
+    fn total_size_cap_evicts_oldest_but_keeps_newest() {
+        let mut h = h();
+        let cap = Limits {
+            max_total_bytes: 25,
+            ..Limits::default()
+        };
+        h.set_limits(cap, now_secs());
+        h.push("a".repeat(10));
+        h.push("b".repeat(10));
+        assert_eq!(h.len(), 2);
+        h.push("c".repeat(10)); // 30 > 25 : le plus ancien part
+        let texts: Vec<_> = h
+            .items()
+            .iter()
+            .map(|i| i.text.chars().next().unwrap())
+            .collect();
+        assert_eq!(texts, vec!['c', 'b']);
+        // L'aperçu suit la même règle (et ne supprime rien).
+        let tight = Limits {
+            max_total_bytes: 5,
+            ..cap
+        };
+        assert_eq!(h.would_remove(tight, now_secs()), 1);
+        assert_eq!(h.len(), 2);
+        // Un texte plus gros que le plafond reste gardé seul (le plus récent).
+        h.push("d".repeat(40));
+        assert_eq!(h.len(), 1);
+        h.push("e".repeat(10));
+        assert_eq!(h.len(), 1, "40 + 10 > 25 : « d » part à son tour");
     }
 
     #[test]

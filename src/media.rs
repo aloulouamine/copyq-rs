@@ -46,6 +46,38 @@ pub fn save_rgba(dir: &Path, width: u32, height: u32, rgba: Vec<u8>) -> Result<S
     save_rgba_limited(dir, width, height, rgba, MAX_PIXELS)
 }
 
+/// Vérifie, avant tout calcul coûteux, qu'une image peut être enregistrée.
+pub fn check(width: u32, height: u32, rgba: &[u8], max_pixels: u64) -> Result<(), String> {
+    if width == 0 || height == 0 {
+        return Err("image vide".into());
+    }
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels > max_pixels {
+        return Err(format!("image trop grande ({width} × {height})"));
+    }
+    if rgba.len() as u64 != pixels * 4 {
+        return Err("données d'image incohérentes".into());
+    }
+    Ok(())
+}
+
+/// Dimensions affichées (« 1280 × 720 »), avant que la taille du fichier soit connue.
+pub fn dimensions(width: u32, height: u32) -> String {
+    format!("{width} × {height}")
+}
+
+/// Description complète (« 1280 × 720 · 245 Ko »).
+pub fn describe(width: u32, height: u32, file_size: u64) -> String {
+    format!("{} · {}", dimensions(width, height), human_size(file_size))
+}
+
+/// Taille du fichier PNG d'une image déjà enregistrée.
+pub fn stored_size(dir: &Path, hash: &str) -> Option<u64> {
+    std::fs::metadata(full_path(dir, hash))
+        .ok()
+        .map(|m| m.len())
+}
+
 pub fn save_rgba_limited(
     dir: &Path,
     width: u32,
@@ -53,20 +85,31 @@ pub fn save_rgba_limited(
     rgba: Vec<u8>,
     max_pixels: u64,
 ) -> Result<Saved, String> {
-    if width == 0 || height == 0 {
-        return Err("image vide".into());
-    }
-    if u64::from(width) * u64::from(height) > max_pixels {
-        return Err(format!("image trop grande ({width} × {height})"));
-    }
+    check(width, height, &rgba, max_pixels)?;
     let hash = hash_rgba(width, height, &rgba);
-    let full = full_path(dir, &hash);
+    let size = write(dir, &hash, width, height, rgba)?;
+    Ok(Saved {
+        meta: describe(width, height, size),
+        hash,
+    })
+}
+
+/// Écrit le PNG et la vignette (la partie lente : encodage) ; renvoie la taille du PNG.
+/// Les fichiers déjà présents ne sont pas réécrits.
+pub fn write(
+    dir: &Path,
+    hash: &str,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+) -> Result<u64, String> {
+    let full = full_path(dir, hash);
     let img = RgbaImage::from_raw(width, height, rgba).ok_or("données d'image incohérentes")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     if !full.exists() {
         write_png_atomic(&full, &img)?;
     }
-    let thumb = thumb_path(dir, &hash);
+    let thumb = thumb_path(dir, hash);
     if !thumb.exists() {
         let small = if width.max(height) > THUMB_MAX {
             image::imageops::resize(
@@ -80,11 +123,7 @@ pub fn save_rgba_limited(
         };
         write_png_atomic(&thumb, &small)?;
     }
-    let size = std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0);
-    Ok(Saved {
-        hash,
-        meta: format!("{width} × {height} · {}", human_size(size)),
-    })
+    Ok(std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0))
 }
 
 fn write_png_atomic(path: &Path, img: &RgbaImage) -> Result<(), String> {

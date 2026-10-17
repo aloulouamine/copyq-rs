@@ -10,8 +10,9 @@ use crate::logging::LockExt;
 use crate::media;
 use crate::pasteboard::{self, Payload};
 use eframe::egui;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -104,8 +105,92 @@ fn images_wanted(shared: &Shared) -> bool {
     shared.save_images.load(Ordering::Relaxed) && shared.max_images.load(Ordering::Relaxed) > 0
 }
 
+/// Image à encoder (PNG + vignette) hors du fil de surveillance.
+struct ImageJob {
+    hash: String,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+}
+
+/// Fil dédié à l'écriture des images. File d'attente courte : au-delà, la
+/// surveillance attend (pas d'accumulation de captures en mémoire).
+struct Encoder {
+    tx: Option<mpsc::SyncSender<ImageJob>>,
+    history: Arc<Mutex<History>>,
+    dir: PathBuf,
+    ctx: egui::Context,
+}
+
+impl Encoder {
+    fn spawn(history: Arc<Mutex<History>>, dir: PathBuf, ctx: egui::Context) -> Self {
+        let (tx, rx) = mpsc::sync_channel::<ImageJob>(2);
+        let worker = Encoder {
+            tx: None,
+            history: history.clone(),
+            dir: dir.clone(),
+            ctx: ctx.clone(),
+        };
+        let tx = thread::Builder::new()
+            .name("image-encoder".into())
+            .spawn(move || {
+                for job in rx {
+                    worker.encode(job);
+                }
+            })
+            .map_err(|e| log::error!("fil des images indisponible ({e}) : encodage sur place"))
+            .ok()
+            .map(|_| tx);
+        Encoder {
+            tx,
+            history,
+            dir,
+            ctx,
+        }
+    }
+
+    fn submit(&self, job: ImageJob) {
+        match &self.tx {
+            Some(tx) => {
+                if let Err(mpsc::SendError(job)) = tx.send(job) {
+                    log::error!("fil des images arrêté : encodage sur place");
+                    self.encode(job);
+                }
+            }
+            None => self.encode(job),
+        }
+    }
+
+    fn encode(&self, job: ImageJob) {
+        let ImageJob {
+            hash,
+            width,
+            height,
+            rgba,
+        } = job;
+        match media::write(&self.dir, &hash, width, height, rgba) {
+            Ok(size) => {
+                let mut h = self.history.lock_safe();
+                if h.has_image(&hash) {
+                    h.set_image_meta(&hash, media::describe(width, height, size));
+                } else {
+                    // Supprimée (ou évincée) pendant l'encodage : pas de fichier orphelin.
+                    drop(h);
+                    media::remove(&self.dir, &hash);
+                }
+            }
+            Err(e) => {
+                log::warn!("image non enregistrée : {e}");
+                self.history.lock_safe().remove_image(&hash);
+            }
+        }
+        self.ctx.request_repaint();
+    }
+}
+
 pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Context) {
     let images_dir = media::images_dir();
+    let encoder = Encoder::spawn(history.clone(), images_dir.clone(), ctx.clone());
     let spawned = thread::Builder::new()
         .name("clipboard-watcher".into())
         .spawn(move || {
@@ -131,6 +216,7 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                     }
                 }
                 let mut seen_types = Vec::new();
+                let mut pending_image: Option<ImageJob> = None;
                 let change = classify(
                     &mut last_count,
                     count,
@@ -179,28 +265,35 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                             continue;
                         };
                         let (w, h) = (img.width as u32, img.height as u32);
+                        let rgba = img.bytes.into_owned();
                         let max = shared.max_image_pixels.load(Ordering::Relaxed);
-                        match media::save_rgba_limited(
-                            &images_dir,
-                            w,
-                            h,
-                            img.bytes.into_owned(),
-                            max,
-                        ) {
-                            Ok(saved) => {
-                                log::info!("image copiée : {}", saved.meta);
-                                Item {
-                                    text: saved.hash,
-                                    kind: ItemKind::Image,
-                                    meta: saved.meta,
-                                    ..Default::default()
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!("image non enregistrée : {e}");
-                                continue;
-                            }
+                        if let Err(e) = media::check(w, h, &rgba, max) {
+                            log::warn!("image non enregistrée : {e}");
+                            continue;
                         }
+                        // L'empreinte est rapide ; l'encodage PNG (lent pour une capture
+                        // 5K) est confié au fil des images, pour ne pas retarder les copies
+                        // suivantes. L'élément apparaît tout de suite, à sa place.
+                        let hash = media::hash_rgba(w, h, &rgba);
+                        let item = Item {
+                            text: hash.clone(),
+                            kind: ItemKind::Image,
+                            meta: match media::stored_size(&images_dir, &hash) {
+                                Some(size) => media::describe(w, h, size),
+                                None => {
+                                    pending_image = Some(ImageJob {
+                                        hash,
+                                        width: w,
+                                        height: h,
+                                        rgba,
+                                    });
+                                    media::dimensions(w, h)
+                                }
+                            },
+                            ..Default::default()
+                        };
+                        log::info!("image copiée : {}", item.meta);
+                        item
                     }
                     _ => {
                         // Erreur = contenu non textuel inconnu : ignoré.
@@ -237,6 +330,10 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                 };
                 if history.lock_safe().push_item(item) {
                     ctx.request_repaint();
+                }
+                // Après l'ajout : le fil des images vérifie que l'image est toujours là.
+                if let Some(job) = pending_image.take() {
+                    encoder.submit(job);
                 }
             }
         });
@@ -339,6 +436,49 @@ pub fn media_selftest() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encoder_writes_files_then_completes_meta_and_leaves_no_orphans() {
+        let dir = std::env::temp_dir().join(format!("copyq-rs-encoder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let history = Arc::new(Mutex::new(History::default()));
+        let enc = Encoder {
+            tx: None,
+            history: history.clone(),
+            dir: dir.clone(),
+            ctx: egui::Context::default(),
+        };
+        let job = |seed: u8| {
+            let rgba = vec![seed; 8 * 4 * 4];
+            ImageJob {
+                hash: media::hash_rgba(8, 4, &rgba),
+                width: 8,
+                height: 4,
+                rgba,
+            }
+        };
+        // Image toujours dans l'historique : fichiers écrits, taille ajoutée.
+        let kept = job(1);
+        let hash = kept.hash.clone();
+        history.lock_safe().push_item(Item {
+            text: hash.clone(),
+            kind: ItemKind::Image,
+            meta: media::dimensions(8, 4),
+            ..Default::default()
+        });
+        enc.encode(kept);
+        assert!(media::full_path(&dir, &hash).exists());
+        assert!(media::thumb_path(&dir, &hash).exists());
+        let meta = history.lock_safe().items()[0].meta.clone();
+        assert!(meta.starts_with("8 × 4 · "), "{meta}");
+        // Image supprimée pendant l'encodage : aucun fichier ne reste.
+        let gone = job(2);
+        let gone_hash = gone.hash.clone();
+        enc.encode(gone);
+        assert!(!media::full_path(&dir, &gone_hash).exists());
+        assert!(!media::thumb_path(&dir, &gone_hash).exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn images_are_skipped_when_disabled_or_limit_is_zero() {

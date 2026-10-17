@@ -37,16 +37,16 @@ enum Kind {
 }
 
 impl Kind {
-    fn detect(text: &str) -> Self {
-        let t = text.trim();
-        let single_word = !t.contains(char::is_whitespace);
+    fn detect(text: &str, stats: history::TextStats) -> Self {
+        let t = text.trim_start();
+        let single_word = stats.single_word;
         if single_word && (t.starts_with("http://") || t.starts_with("https://")) {
             Kind::Link
         } else if single_word && (t.starts_with('/') || t.starts_with("~/")) {
             Kind::Path
         } else if single_word && t.contains('@') && t.contains('.') {
             Kind::Email
-        } else if t.contains('\n') {
+        } else if stats.lines > 1 {
             Kind::Multiline
         } else {
             Kind::Text
@@ -77,6 +77,7 @@ impl Kind {
 }
 
 /// Ligne affichée, calculée une fois puis mise en cache.
+#[derive(Clone)]
 struct Row {
     index: usize,
     title: String,
@@ -120,6 +121,9 @@ pub struct CopyApp {
     toast: Option<Toast>,
     /// (version de l'historique, requête) → lignes.
     cache: Option<(u64, String, Arc<Vec<Row>>)>,
+    /// Lignes de tous les éléments (par version de l'historique) : la recherche ne
+    /// fait plus que filtrer, sans recalculer aperçus ni accès disque à chaque frappe.
+    all_rows: Option<(u64, Arc<Vec<Row>>)>,
     _tray: Option<tray_icon::TrayIcon>,
     _hotkey: Option<global_hotkey::GlobalHotKeyManager>,
 }
@@ -182,6 +186,7 @@ impl CopyApp {
             last_expire: Instant::now(),
             toast,
             cache: None,
+            all_rows: None,
             _tray: tray,
             _hotkey: hotkey,
         };
@@ -201,77 +206,32 @@ impl CopyApp {
                 return rows.clone();
             }
         }
-        let rows: Arc<Vec<Row>> = Arc::new(
-            h.search(&self.query)
-                .into_iter()
-                .map(|i| {
-                    let it = &h.items()[i];
-                    let mut row = Row {
-                        index: i,
-                        title: if it.sensitive {
-                            "••••••••••••".to_string()
-                        } else {
-                            history::preview(&it.text, PREVIEW_CHARS)
-                        },
-                        kind: if it.sensitive {
-                            Kind::Secret
-                        } else {
-                            Kind::detect(&it.text)
-                        },
-                        sensitive: it.sensitive,
-                        copied_at: it.copied_at,
-                        lines: it.text.trim().lines().count().max(1),
-                        chars: it.text.chars().count(),
-                        item_kind: it.kind,
-                        thumb: None,
-                        detail: String::new(),
-                    };
-                    match it.kind {
-                        ItemKind::Text => {}
-                        ItemKind::Image => {
-                            row.kind = Kind::Image;
-                            row.title = "Image".into();
-                            row.thumb = Some(it.text.clone());
-                            row.detail = it.meta.clone();
-                        }
-                        ItemKind::Files => {
-                            let paths = it.paths();
-                            // macOS fournit les noms de fichiers décomposés (NFD : « e » +
-                            // accent) ; on les recompose pour un affichage correct.
-                            let name = |p: &std::path::Path| {
-                                p.file_name()
-                                    .map(|n| n.to_string_lossy().nfc().collect::<String>())
-                                    .unwrap_or_else(|| p.display().to_string().nfc().collect())
-                            };
-                            row.title = match paths.len() {
-                                0 => "Fichier".into(),
-                                1 => name(&paths[0]),
-                                n => format!("{} + {} autre(s)", name(&paths[0]), n - 1),
-                            };
-                            row.kind = if paths.len() == 1 && paths[0].is_dir() {
-                                Kind::Folder
-                            } else {
-                                Kind::File
-                            };
-                            let parent = paths
-                                .first()
-                                .and_then(|p| p.parent())
-                                .map(shorten_home)
-                                .unwrap_or_default();
-                            let missing = !paths.iter().all(|p| p.exists());
-                            row.detail = if missing {
-                                format!("{parent}  ·  introuvable")
-                            } else if paths.len() > 1 {
-                                format!("{} fichiers  ·  {parent}", paths.len())
-                            } else {
-                                parent
-                            };
-                        }
-                    }
-                    row
-                })
-                .collect(),
-        );
+        if self.all_rows.as_ref().map(|(v, _)| *v) != Some(h.version()) {
+            let all: Vec<Row> = h
+                .items()
+                .iter()
+                .enumerate()
+                .map(|(i, it)| build_row(i, it))
+                .collect();
+            self.all_rows = Some((h.version(), Arc::new(all)));
+            // Vignette absente : l'image était peut-être encore en cours d'écriture.
+            self.thumbs.retain(|_, t| t.is_some());
+        }
+        let all = self
+            .all_rows
+            .as_ref()
+            .map(|(_, r)| r.clone())
+            .unwrap_or_default();
+        let rows: Arc<Vec<Row>> = if self.query.trim().is_empty() {
+            all
+        } else {
+            Arc::new(
+                h.search(&self.query)
+                    .into_iter()
+                    .filter_map(|i| all.get(i).cloned())
+                    .collect(),
+            )
+        };
         self.cache = Some((h.version(), self.query.clone(), rows.clone()));
         rows
     }
@@ -446,6 +406,19 @@ impl CopyApp {
                         .range(settings::TEXT_KB_RANGE)
                         .speed(10.0)
                         .suffix(" Ko"),
+                );
+            },
+        );
+        row(
+            ui,
+            "Taille totale des textes",
+            "Au-delà, les plus anciens sont supprimés.",
+            &mut |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut draft.max_total_mb)
+                        .range(settings::TOTAL_MB_RANGE)
+                        .speed(5.0)
+                        .suffix(" Mo"),
                 );
             },
         );
@@ -1340,6 +1313,74 @@ fn row_height(row: &Row) -> f32 {
 }
 
 /// Charge la vignette d'une image enregistrée en texture egui.
+/// Ligne affichée pour un élément (aperçu, icône, statistiques, détails).
+fn build_row(i: usize, it: &history::Item) -> Row {
+    let stats = it.stats();
+    let mut row = Row {
+        index: i,
+        title: if it.sensitive {
+            "••••••••••••".to_string()
+        } else {
+            history::preview(&it.text, PREVIEW_CHARS)
+        },
+        kind: if it.sensitive {
+            Kind::Secret
+        } else {
+            Kind::detect(&it.text, stats)
+        },
+        sensitive: it.sensitive,
+        copied_at: it.copied_at,
+        lines: stats.lines,
+        chars: stats.chars,
+        item_kind: it.kind,
+        thumb: None,
+        detail: String::new(),
+    };
+    match it.kind {
+        ItemKind::Text => {}
+        ItemKind::Image => {
+            row.kind = Kind::Image;
+            row.title = "Image".into();
+            row.thumb = Some(it.text.clone());
+            row.detail = it.meta.clone();
+        }
+        ItemKind::Files => {
+            let paths = it.paths();
+            // macOS fournit les noms de fichiers décomposés (NFD : « e » +
+            // accent) ; on les recompose pour un affichage correct.
+            let name = |p: &std::path::Path| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().nfc().collect::<String>())
+                    .unwrap_or_else(|| p.display().to_string().nfc().collect())
+            };
+            row.title = match paths.len() {
+                0 => "Fichier".into(),
+                1 => name(&paths[0]),
+                n => format!("{} + {} autre(s)", name(&paths[0]), n - 1),
+            };
+            row.kind = if paths.len() == 1 && paths[0].is_dir() {
+                Kind::Folder
+            } else {
+                Kind::File
+            };
+            let parent = paths
+                .first()
+                .and_then(|p| p.parent())
+                .map(shorten_home)
+                .unwrap_or_default();
+            let missing = !paths.iter().all(|p| p.exists());
+            row.detail = if missing {
+                format!("{parent}  ·  introuvable")
+            } else if paths.len() > 1 {
+                format!("{} fichiers  ·  {parent}", paths.len())
+            } else {
+                parent
+            };
+        }
+    }
+    row
+}
+
 /// Empreintes des images encore présentes dans l'historique.
 fn image_hashes(history: &History) -> HashSet<&str> {
     history
@@ -1428,7 +1469,7 @@ fn tooltip(history: &Mutex<History>, index: usize) -> String {
         .get(index)
         .map(|it| {
             let mut s: String = it.text.chars().take(TOOLTIP_CHARS).collect();
-            if it.text.chars().count() > TOOLTIP_CHARS {
+            if it.text.chars().nth(TOOLTIP_CHARS).is_some() {
                 s.push_str("\n…");
             }
             s

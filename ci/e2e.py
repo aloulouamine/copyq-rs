@@ -151,6 +151,7 @@ try:
         _, h, meta = images[0]
         img_dir = os.path.join(DATA, "images")
         check("…avec ses dimensions", meta.startswith("321 × 123"))
+        check("…et la taille du fichier, une fois encodé à part", " · " in meta)
         check("…son fichier PNG et sa vignette",
               os.path.exists(os.path.join(img_dir, h + ".png"))
               and os.path.exists(os.path.join(img_dir, h + ".thumb.png")))
