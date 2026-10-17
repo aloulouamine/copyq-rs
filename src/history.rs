@@ -17,6 +17,10 @@ pub struct Item {
     pub text: String,
     /// Horodatage Unix (secondes) de la dernière copie.
     pub copied_at: u64,
+    /// Copie marquée confidentielle (mot de passe) : affichée masquée,
+    /// exclue de la recherche.
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 #[derive(Default)]
@@ -57,17 +61,23 @@ impl History {
         self.items.len()
     }
 
-    /// Ajoute un texte en tête. Un doublon est remonté en tête au lieu d'être dupliqué.
-    /// Renvoie `true` si l'historique a changé.
+    /// Ajoute un texte ordinaire en tête (voir `push_with`).
     pub fn push(&mut self, text: String) -> bool {
+        self.push_with(text, false)
+    }
+
+    /// Ajoute un texte en tête. Un doublon est remonté en tête au lieu d'être dupliqué
+    /// (et reste masqué s'il l'était). Renvoie `true` si l'historique a changé.
+    pub fn push_with(&mut self, text: String, sensitive: bool) -> bool {
         if text.trim().is_empty() || text.len() > MAX_ITEM_BYTES {
             return false;
         }
         match self.items.iter().position(|it| it.text == text) {
-            Some(0) => return false,
+            Some(0) if !sensitive || self.items[0].sensitive => return false,
             Some(pos) => {
                 let mut item = self.items.remove(pos);
                 item.copied_at = now_secs();
+                item.sensitive |= sensitive;
                 self.items.insert(0, item);
             }
             None => {
@@ -76,6 +86,7 @@ impl History {
                     Item {
                         text,
                         copied_at: now_secs(),
+                        sensitive,
                     },
                 );
                 if self.items.len() > MAX_ITEMS {
@@ -105,6 +116,29 @@ impl History {
         removed
     }
 
+    pub fn sensitive_count(&self) -> usize {
+        self.items.iter().filter(|it| it.sensitive).count()
+    }
+
+    /// Supprime tous les mots de passe enregistrés ; renvoie leur nombre.
+    pub fn remove_sensitive(&mut self) -> usize {
+        let before = self.items.len();
+        let store = &self.store;
+        self.items.retain(|it| {
+            if it.sensitive {
+                if let Some(store) = store {
+                    store.delete(&it.text);
+                }
+            }
+            !it.sensitive
+        });
+        let removed = before - self.items.len();
+        if removed > 0 {
+            self.version += 1;
+        }
+        removed
+    }
+
     pub fn clear(&mut self) {
         self.items.clear();
         if let Some(store) = &self.store {
@@ -114,7 +148,8 @@ impl History {
     }
 
     /// Indices des éléments correspondant à la requête : chaque mot doit apparaître
-    /// (insensible à la casse). Une requête vide renvoie tout.
+    /// (insensible à la casse). Une requête vide renvoie tout. Les éléments masqués
+    /// (mots de passe) ne sont jamais retrouvés par la recherche.
     pub fn search(&self, query: &str) -> Vec<usize> {
         let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
         self.items
@@ -123,6 +158,9 @@ impl History {
             .filter(|(_, it)| {
                 if words.is_empty() {
                     return true;
+                }
+                if it.sensitive {
+                    return false;
                 }
                 let hay = it.text.to_lowercase();
                 words.iter().all(|w| hay.contains(w.as_str()))
@@ -213,6 +251,28 @@ mod tests {
         assert!(!h.push("   \n".into()));
         assert!(!h.push("x".repeat(MAX_ITEM_BYTES + 1)));
         assert_eq!(h.len(), 0);
+    }
+
+    #[test]
+    fn sensitive_items_are_kept_flagged_and_hidden_from_search() {
+        let mut h = h();
+        assert!(h.push_with("motdepasse123".into(), true));
+        h.push("texte ordinaire".into());
+        assert!(h.items()[1].sensitive);
+        assert!(h.search("motdepasse").is_empty(), "jamais trouvé par la recherche");
+        assert_eq!(h.search("").len(), 2, "mais bien listé");
+        // Recopié comme texte ordinaire : reste masqué.
+        h.push("motdepasse123".into());
+        assert!(h.items()[0].sensitive);
+        // Un texte ordinaire déjà en tête, recopié depuis un gestionnaire : devient masqué.
+        h.push("partagé".into());
+        assert!(h.push_with("partagé".into(), true));
+        assert!(h.items()[0].sensitive);
+
+        assert_eq!(h.sensitive_count(), 2);
+        assert_eq!(h.remove_sensitive(), 2);
+        assert_eq!(h.sensitive_count(), 0);
+        assert_eq!(h.len(), 1);
     }
 
     #[test]

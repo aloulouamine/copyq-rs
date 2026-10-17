@@ -23,8 +23,9 @@ enum Change {
     None,
     /// Nouveau contenu, mais à ignorer (pause ou contenu confidentiel).
     Skip(&'static str),
-    /// Nouveau contenu à lire et enregistrer.
-    Read,
+    /// Nouveau contenu à lire et enregistrer ; `sensitive` = mot de passe
+    /// (enregistré seulement si l'utilisateur l'a autorisé, affiché masqué).
+    Read { sensitive: bool },
 }
 
 /// Décide quoi faire à partir du compteur (None si indisponible hors macOS).
@@ -32,6 +33,7 @@ fn classify(
     last_count: &mut Option<isize>,
     count: Option<isize>,
     paused: bool,
+    save_passwords: bool,
     types: impl FnOnce() -> Vec<String>,
 ) -> Change {
     let previous = *last_count;
@@ -52,13 +54,19 @@ fn classify(
         *last_count = previous;
         return Change::None;
     }
-    if pasteboard::should_ignore(&types) {
+    let sensitive = pasteboard::should_ignore(&types);
+    if sensitive && !save_passwords {
         return Change::Skip("contenu confidentiel");
     }
-    Change::Read
+    Change::Read { sensitive }
 }
 
-pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx: egui::Context) {
+pub fn spawn_watcher(
+    history: Arc<Mutex<History>>,
+    paused: Arc<AtomicBool>,
+    save_passwords: Arc<AtomicBool>,
+    ctx: egui::Context,
+) {
     let spawned = thread::Builder::new()
         .name("clipboard-watcher".into())
         .spawn(move || {
@@ -77,19 +85,21 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
             loop {
                 thread::sleep(POLL_INTERVAL);
                 let count = pasteboard::change_count();
-                match classify(
+                let change = classify(
                     &mut last_count,
                     count,
                     paused.load(Ordering::Relaxed),
+                    save_passwords.load(Ordering::Relaxed),
                     pasteboard::types,
-                ) {
+                );
+                let sensitive = match change {
                     Change::None => continue,
                     Change::Skip(reason) => {
                         log::info!("Copie ignorée ({reason})");
                         continue;
                     }
-                    Change::Read => {}
-                }
+                    Change::Read { sensitive } => sensitive,
+                };
                 // Erreur = contenu non textuel (image, fichier…) : ignoré.
                 let Ok(text) = clipboard.get_text() else { continue };
                 if count.is_none() {
@@ -98,7 +108,10 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
                     }
                     last_text = Some(text.clone());
                 }
-                let changed = history.lock_safe().push(text);
+                if sensitive {
+                    log::info!("Mot de passe enregistré (réglage activé), affiché masqué");
+                }
+                let changed = history.lock_safe().push_with(text, sensitive);
                 if changed {
                     ctx.request_repaint();
                 }
@@ -120,30 +133,30 @@ mod tests {
     #[test]
     fn unchanged_counter_does_nothing() {
         let mut last = Some(5);
-        assert_eq!(classify(&mut last, Some(5), false, plain), Change::None);
+        assert_eq!(classify(&mut last, Some(5), false, false, plain), Change::None);
     }
 
     #[test]
     fn new_counter_reads() {
         let mut last = Some(5);
-        assert_eq!(classify(&mut last, Some(6), false, plain), Change::Read);
+        assert_eq!(classify(&mut last, Some(6), false, false, plain), Change::Read { sensitive: false });
         assert_eq!(last, Some(6));
-        assert_eq!(classify(&mut last, Some(6), false, plain), Change::None);
+        assert_eq!(classify(&mut last, Some(6), false, false, plain), Change::None);
     }
 
     #[test]
     fn concealed_is_skipped_and_not_reread() {
         let mut last = Some(1);
         let secret = || vec!["org.nspasteboard.ConcealedType".to_string()];
-        assert!(matches!(classify(&mut last, Some(2), false, secret), Change::Skip(_)));
+        assert!(matches!(classify(&mut last, Some(2), false, false, secret), Change::Skip(_)));
         // Le compteur a été mémorisé : on ne retente pas sur le même contenu.
-        assert_eq!(classify(&mut last, Some(2), false, plain), Change::None);
+        assert_eq!(classify(&mut last, Some(2), false, false, plain), Change::None);
     }
 
     #[test]
     fn pause_skips_without_reading_types() {
         let mut last = Some(1);
-        let r = classify(&mut last, Some(2), true, || panic!("types lus pendant la pause"));
+        let r = classify(&mut last, Some(2), true, false, || panic!("types lus pendant la pause"));
         assert_eq!(r, Change::Skip("pause"));
     }
 
@@ -151,16 +164,26 @@ mod tests {
     fn cleared_but_not_yet_written_is_retried() {
         let mut last = Some(1);
         // L'app source vient de vider le presse-papiers : rien à lire encore.
-        assert_eq!(classify(&mut last, Some(2), false, Vec::new), Change::None);
+        assert_eq!(classify(&mut last, Some(2), false, false, Vec::new), Change::None);
         assert_eq!(last, Some(1), "le compteur ne doit pas être mémorisé");
         // Le contenu est écrit (même compteur) : on le lit bien.
-        assert_eq!(classify(&mut last, Some(2), false, plain), Change::Read);
+        assert_eq!(classify(&mut last, Some(2), false, false, plain), Change::Read { sensitive: false });
         assert_eq!(last, Some(2));
+    }
+
+    #[test]
+    fn concealed_is_kept_when_allowed_and_marked_sensitive() {
+        let mut last = Some(1);
+        let secret = || vec!["org.nspasteboard.ConcealedType".to_string()];
+        assert_eq!(
+            classify(&mut last, Some(2), false, true, secret),
+            Change::Read { sensitive: true }
+        );
     }
 
     #[test]
     fn without_counter_always_reads() {
         let mut last = None;
-        assert_eq!(classify(&mut last, None, false, plain), Change::Read);
+        assert_eq!(classify(&mut last, None, false, false, plain), Change::Read { sensitive: false });
     }
 }

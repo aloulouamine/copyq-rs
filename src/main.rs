@@ -10,6 +10,7 @@ mod logging;
 mod login_item;
 mod pasteboard;
 mod platform;
+mod settings;
 mod single_instance;
 mod storage;
 mod theme;

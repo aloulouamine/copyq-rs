@@ -7,6 +7,7 @@ samples = [
     ("Réunion d'équipe déplacée à 15h — salle Lumière", 140),
     ("fn main() {\n    println!(\"Bonjour depuis CopyQ-rs\");\n}\n", 600),
     ("amine@example.com", 1_900),
+    ("hunter2-MotDePasse!", 2_500, True),
     ("~/Project/copyq/src/app.rs", 4_000),
     ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.", 9_000),
     ("SELECT id, name, created_at\nFROM users\nWHERE active = true\nORDER BY created_at DESC\nLIMIT 50;", 30_000),
@@ -14,7 +15,10 @@ samples = [
     ("cargo run --release", 200_000),
     ("Merci pour ton retour, je regarde ça demain matin !", 400_000),
 ]
-items = [{"text": t, "copied_at": now - age} for t, age in samples]
+items = [
+    {"text": s[0], "copied_at": now - s[1], "sensitive": len(s) > 2 and s[2]}
+    for s in samples
+]
 path = sys.argv[1]
 os.makedirs(os.path.dirname(path), exist_ok=True)
 # Repartir d'une base vide : le JSON sera importé au lancement (test de migration).

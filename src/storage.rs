@@ -145,12 +145,14 @@ async fn init(path: &Path, legacy_json: Option<&Path>) -> Result<(turso::Connect
         "CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
             text TEXT NOT NULL,
-            copied_at INTEGER NOT NULL
+            copied_at INTEGER NOT NULL,
+            sensitive INTEGER NOT NULL DEFAULT 0
         )",
         (),
     )
     .await
     .map_err(|e| format!("création du schéma : {e}"))?;
+    migrate_schema(&conn).await?;
 
     let mut items = load(&conn).await?;
     if items.is_empty() {
@@ -165,8 +167,25 @@ async fn init(path: &Path, legacy_json: Option<&Path>) -> Result<(turso::Connect
     Ok((conn, items))
 }
 
+/// Bases créées avant l'ajout de la colonne `sensitive` (v0.2) : on l'ajoute.
+async fn migrate_schema(conn: &turso::Connection) -> Result<(), String> {
+    if conn.query("SELECT sensitive FROM items LIMIT 1", ()).await.is_ok() {
+        return Ok(());
+    }
+    conn.execute(
+        "ALTER TABLE items ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0",
+        (),
+    )
+    .await
+    .map_err(|e| format!("mise à jour du schéma : {e}"))?;
+    log::info!("schéma mis à jour : colonne « sensitive » ajoutée");
+    Ok(())
+}
+
 async fn load(conn: &turso::Connection) -> Result<Vec<Item>, String> {
-    let sql = format!("SELECT text, copied_at FROM items ORDER BY id DESC LIMIT {LOAD_LIMIT}");
+    let sql = format!(
+        "SELECT text, copied_at, sensitive FROM items ORDER BY id DESC LIMIT {LOAD_LIMIT}"
+    );
     let mut rows = conn.query(&sql, ()).await.map_err(|e| e.to_string())?;
     let mut items = Vec::new();
     while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
@@ -178,7 +197,11 @@ async fn load(conn: &turso::Connection) -> Result<Vec<Item>, String> {
             turso::Value::Integer(i) => i.max(0) as u64,
             _ => 0,
         };
-        items.push(Item { text, copied_at });
+        let sensitive = matches!(
+            row.get_value(2).map_err(|e| e.to_string())?,
+            turso::Value::Integer(i) if i != 0
+        );
+        items.push(Item { text, copied_at, sensitive });
     }
     Ok(items)
 }
@@ -190,10 +213,11 @@ async fn upsert(conn: &turso::Connection, item: &Item) -> Result<(), String> {
         conn.execute("DELETE FROM items WHERE text = ?1", [item.text.as_str()])
             .await
             .map_err(|e| e.to_string())?;
-        // copied_at est un entier que nous contrôlons : pas d'injection possible.
+        // copied_at et sensitive sont des entiers que nous contrôlons : pas d'injection.
         let sql = format!(
-            "INSERT INTO items (text, copied_at) VALUES (?1, {})",
-            item.copied_at as i64
+            "INSERT INTO items (text, copied_at, sensitive) VALUES (?1, {}, {})",
+            item.copied_at as i64,
+            i64::from(item.sensitive)
         );
         conn.execute(&sql, [item.text.as_str()])
             .await
@@ -242,7 +266,7 @@ mod tests {
     }
 
     fn item(text: &str, at: u64) -> Item {
-        Item { text: text.into(), copied_at: at }
+        Item { text: text.into(), copied_at: at, sensitive: false }
     }
 
     #[test]
@@ -286,6 +310,54 @@ mod tests {
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, tricky);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn sensitive_flag_roundtrip() {
+        let dir = temp_dir("sensitive");
+        let db = dir.join("h.db");
+        {
+            let (store, _) = Store::open(db.clone(), None).unwrap();
+            store.upsert(&Item { text: "secret".into(), copied_at: 2, sensitive: true });
+            store.upsert(&item("public", 3));
+            assert!(store.close(Duration::from_secs(5)));
+        }
+        let (store, items) = Store::open(db, None).unwrap();
+        store.close(Duration::from_secs(5));
+        assert_eq!(items.len(), 2);
+        assert!(!items[0].sensitive && items[0].text == "public");
+        assert!(items[1].sensitive && items[1].text == "secret");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn upgrades_schema_of_older_database() {
+        let dir = temp_dir("schema");
+        let db = dir.join("h.db");
+        // Base au format v0.1 (sans colonne `sensitive`).
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(async {
+            let d = turso::Builder::new_local(db.to_str().unwrap()).build().await.unwrap();
+            let c = d.connect().unwrap();
+            c.execute(
+                "CREATE TABLE items (id INTEGER PRIMARY KEY, text TEXT NOT NULL, copied_at INTEGER NOT NULL)",
+                (),
+            )
+            .await
+            .unwrap();
+            c.execute("INSERT INTO items (text, copied_at) VALUES ('ancien', 5)", ()).await.unwrap();
+        });
+        drop(rt);
+        let (store, items) = Store::open(db.clone(), None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].text, "ancien");
+        assert!(!items[0].sensitive);
+        store.upsert(&Item { text: "nouveau".into(), copied_at: 6, sensitive: true });
+        assert!(store.close(Duration::from_secs(5)));
+        let (store, items) = Store::open(db, None).unwrap();
+        store.close(Duration::from_secs(5));
+        assert!(items[0].sensitive);
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -107,3 +107,22 @@ pub fn trash(p: &Painter, c: Pos2, color: Color32) {
         p.line_segment([pos2(c.x + dx, c.y - 1.5), pos2(c.x + dx, c.y + 3.5)], st);
     }
 }
+
+/// Cadenas (mots de passe enregistrés, affichés masqués).
+pub fn lock(p: &Painter, c: Pos2, color: Color32) {
+    let body = Rect::from_center_size(pos2(c.x, c.y + 2.5), vec2(12.0, 9.0));
+    p.rect_stroke(body, Rounding::same(2.0), s(color));
+    let r = 3.5;
+    let base = body.top();
+    let arc: Vec<Pos2> = (0..=12)
+        .map(|i| {
+            let t = std::f32::consts::PI * (i as f32 / 12.0);
+            pos2(c.x - r * t.cos(), base - 2.0 - r * t.sin())
+        })
+        .collect();
+    let mut shackle = vec![pos2(c.x - r, base)];
+    shackle.extend(arc);
+    shackle.push(pos2(c.x + r, base));
+    p.add(Shape::line(shackle, s(color)));
+    p.circle_filled(pos2(c.x, c.y + 2.5), 1.3, color);
+}

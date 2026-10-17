@@ -61,6 +61,11 @@ jobs:
             kill $PID 2>/dev/null || true
             sleep 2
           done
+          COPYQ_THEME=dark COPYQ_OPEN_SETTINGS=1 ./target/release/copyq-rs > shots/run-settings.log 2>&1 &
+          PID=$!
+          sleep 8
+          screencapture -x shots/settings.png || true
+          kill $PID 2>/dev/null || true
           ls -la shots
 
       - name: Publier les captures et journaux (branche ci-results)

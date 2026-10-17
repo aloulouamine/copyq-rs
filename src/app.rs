@@ -2,6 +2,7 @@
 
 use crate::history::{self, History};
 use crate::logging::LockExt;
+use crate::settings::{self, Settings};
 use crate::theme::{self, Palette};
 use crate::{clipboard, hotkey, icons, login_item, platform, tray};
 use eframe::egui::{
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 const PREVIEW_CHARS: usize = 160;
 const TOOLTIP_CHARS: usize = 1_500;
 const ROW_HEIGHT: f32 = 54.0;
+const SETTINGS_POPUP: &str = "settings_popup";
 /// Hauteur réservée en haut pour les boutons de fenêtre macOS (barre de titre transparente).
 const TITLEBAR_HEIGHT: f32 = 28.0;
 
@@ -26,6 +28,7 @@ enum Kind {
     Email,
     Multiline,
     Text,
+    Secret,
 }
 
 impl Kind {
@@ -51,6 +54,7 @@ impl Kind {
             Kind::Path => icons::folder(painter, center, color),
             Kind::Email => icons::envelope(painter, center, color),
             Kind::Multiline => icons::lines(painter, center, color),
+            Kind::Secret => icons::lock(painter, center, color),
             Kind::Text => {
                 painter.text(
                     center,
@@ -72,6 +76,7 @@ struct Row {
     copied_at: u64,
     lines: usize,
     chars: usize,
+    sensitive: bool,
 }
 
 struct Toast {
@@ -88,8 +93,11 @@ pub struct CopyApp {
     query: String,
     selected: usize,
     scroll_to_selected: bool,
-    hide_after_copy: bool,
+    settings: Settings,
+    /// Partagé avec la surveillance du presse-papiers.
+    save_passwords: Arc<AtomicBool>,
     confirm_clear: bool,
+    open_settings_on_start: bool,
     login_status: login_item::Status,
     toast: Option<Toast>,
     /// (version de l'historique, requête) → lignes.
@@ -102,8 +110,16 @@ impl CopyApp {
     pub fn new(cc: &eframe::CreationContext<'_>, history: Arc<Mutex<History>>) -> Self {
         theme::install(&cc.egui_ctx);
 
+        let settings = Settings::load(&settings::default_path());
+        log::info!("réglages : {settings:?}");
         let paused = Arc::new(AtomicBool::new(false));
-        clipboard::spawn_watcher(history.clone(), paused.clone(), cc.egui_ctx.clone());
+        let save_passwords = Arc::new(AtomicBool::new(settings.save_passwords));
+        clipboard::spawn_watcher(
+            history.clone(),
+            paused.clone(),
+            save_passwords.clone(),
+            cc.egui_ctx.clone(),
+        );
 
         let tray = match tray::create(&cc.egui_ctx) {
             Ok(t) => Some(t),
@@ -135,9 +151,11 @@ impl CopyApp {
             query: String::new(),
             selected: 0,
             scroll_to_selected: false,
-            hide_after_copy: true,
+            settings,
+            save_passwords,
             login_status: login_item::status(),
             confirm_clear: false,
+            open_settings_on_start: std::env::var_os("COPYQ_OPEN_SETTINGS").is_some(),
             toast,
             cache: None,
             _tray: tray,
@@ -159,8 +177,13 @@ impl CopyApp {
                     let it = &h.items()[i];
                     Row {
                         index: i,
-                        title: history::preview(&it.text, PREVIEW_CHARS),
-                        kind: Kind::detect(&it.text),
+                        title: if it.sensitive {
+                            "••••••••••••".to_string()
+                        } else {
+                            history::preview(&it.text, PREVIEW_CHARS)
+                        },
+                        kind: if it.sensitive { Kind::Secret } else { Kind::detect(&it.text) },
+                        sensitive: it.sensitive,
                         copied_at: it.copied_at,
                         lines: it.text.trim().lines().count().max(1),
                         chars: it.text.chars().count(),
@@ -193,7 +216,7 @@ impl CopyApp {
         self.selected = 0;
         self.scroll_to_selected = true;
         self.notify("Copié dans le presse-papiers");
-        if self.hide_after_copy {
+        if self.settings.hide_after_copy {
             self.query.clear();
             platform::hide_window(ctx);
         }
@@ -206,6 +229,80 @@ impl CopyApp {
     fn clear_all(&mut self) {
         self.history.lock_safe().clear();
         self.selected = 0;
+    }
+
+    /// Contenu du panneau « Réglages ».
+    fn settings_ui(&mut self, ui: &mut Ui, p: &Palette) {
+        ui.set_width(310.0);
+        ui.spacing_mut().item_spacing.y = 4.0;
+        ui.label(RichText::new("Réglages").size(13.5).color(p.text).strong());
+        ui.add_space(6.0);
+
+        let mut changed = false;
+        ui.horizontal(|ui| {
+            changed |= toggle(ui, &mut self.settings.hide_after_copy, "Masquer après copie", p)
+                .changed();
+        });
+        caption(ui, "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.", p);
+        ui.add_space(8.0);
+
+        let available = self.login_status != login_item::Status::Unavailable;
+        let mut on = matches!(
+            self.login_status,
+            login_item::Status::Enabled | login_item::Status::RequiresApproval
+        );
+        let resp = ui
+            .add_enabled_ui(available, |ui| {
+                ui.horizontal(|ui| toggle(ui, &mut on, "Ouvrir au démarrage", p)).inner
+            })
+            .inner;
+        if available && resp.changed() {
+            self.set_login_item(on);
+        }
+        caption(
+            ui,
+            if available {
+                "Lance CopyQ-rs à l'ouverture de votre session."
+            } else {
+                "Disponible une fois l'app installée en tant qu'application (.app)."
+            },
+            p,
+        );
+        ui.add_space(8.0);
+
+        ui.horizontal(|ui| {
+            if toggle(ui, &mut self.settings.save_passwords, "Enregistrer les mots de passe", p)
+                .changed()
+            {
+                changed = true;
+                self.save_passwords
+                    .store(self.settings.save_passwords, Ordering::Relaxed);
+                log::info!("enregistrement des mots de passe : {}", self.settings.save_passwords);
+            }
+        });
+        caption(
+            ui,
+            "Copies marquées confidentielles par 1Password, Bitwarden, le trousseau… \
+             Elles sont affichées masquées et exclues de la recherche.",
+            p,
+        );
+        let stored = self.history.lock_safe().sensitive_count();
+        if stored > 0 {
+            ui.add_space(4.0);
+            let label = if stored == 1 {
+                "Effacer le mot de passe enregistré".to_string()
+            } else {
+                format!("Effacer les {stored} mots de passe enregistrés")
+            };
+            if ghost_button(ui, &label, p.danger, p).clicked() {
+                let n = self.history.lock_safe().remove_sensitive();
+                self.notify(format!("{n} mot(s) de passe effacé(s)"));
+            }
+        }
+
+        if changed {
+            self.settings.save(&settings::default_path());
+        }
     }
 
     fn set_login_item(&mut self, enabled: bool) {
@@ -248,6 +345,10 @@ impl CopyApp {
 
 impl eframe::App for CopyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
+        if std::mem::take(&mut self.open_settings_on_start) {
+            ctx.memory_mut(|m| m.open_popup(egui::Id::new(SETTINGS_POPUP)));
+        }
         // Fermer la fenêtre = la masquer ; l'application reste dans la barre des menus.
         if ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -385,27 +486,6 @@ impl eframe::App for CopyApp {
                     {
                         self.paused.store(paused, Ordering::Relaxed);
                     }
-                    ui.add_space(10.0);
-                    toggle(ui, &mut self.hide_after_copy, "Masquer après copie", &p);
-                    ui.add_space(10.0);
-                    let available = self.login_status != login_item::Status::Unavailable;
-                    let mut on = matches!(
-                        self.login_status,
-                        login_item::Status::Enabled | login_item::Status::RequiresApproval
-                    );
-                    let resp = ui
-                        .add_enabled_ui(available, |ui| toggle(ui, &mut on, "Au démarrage", &p))
-                        .inner;
-                    let resp = if available {
-                        resp.on_hover_text("Ouvrir CopyQ-rs à l'ouverture de session")
-                    } else {
-                        resp.on_disabled_hover_text(
-                            "Disponible une fois l'app installée en tant qu'application (.app)",
-                        )
-                    };
-                    if available && resp.changed() {
-                        self.set_login_item(on);
-                    }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if self.confirm_clear {
@@ -426,6 +506,19 @@ impl eframe::App for CopyApp {
                         {
                             self.confirm_clear = true;
                         }
+                        let button = ghost_button(ui, "Réglages", p.text_muted, &p);
+                        let popup_id = egui::Id::new(SETTINGS_POPUP);
+                        if button.clicked() {
+                            ui.memory_mut(|m| m.toggle_popup(popup_id));
+                        }
+                        egui::popup::popup_above_or_below_widget(
+                            ui,
+                            popup_id,
+                            &button,
+                            egui::AboveOrBelow::Above,
+                            egui::popup::PopupCloseBehavior::CloseOnClickOutside,
+                            |ui| self.settings_ui(ui, &p),
+                        );
                     });
                 });
                 ui.add_space(6.0);
@@ -631,12 +724,20 @@ fn row_ui(
     }
     resp.on_hover_ui(|ui| {
         ui.set_max_width(440.0);
-        ui.label(RichText::new(tooltip(hist, row.index)).size(12.5));
+        let text = if row.sensitive {
+            "Mot de passe masqué — cliquez ou ↵ pour le copier".to_string()
+        } else {
+            tooltip(hist, row.index)
+        };
+        ui.label(RichText::new(text).size(12.5));
     });
     action
 }
 
 fn meta_text(row: &Row, now: u64) -> String {
+    if row.sensitive {
+        return format!("mot de passe  ·  {}", history::relative_time(row.copied_at, now));
+    }
     let mut parts = vec![history::relative_time(row.copied_at, now)];
     if row.lines > 1 {
         parts.push(format!("{} lignes", row.lines));
@@ -723,6 +824,10 @@ fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> egui::Respons
     ui.painter()
         .circle_filled(egui::pos2(x, rect.center().y), radius - 2.5, Color32::WHITE);
     resp | label_resp
+}
+
+fn caption(ui: &mut Ui, text: &str, p: &Palette) {
+    ui.add(egui::Label::new(RichText::new(text).size(11.5).color(p.text_faint)).wrap());
 }
 
 fn ghost_button(ui: &mut Ui, text: &str, color: Color32, p: &Palette) -> egui::Response {

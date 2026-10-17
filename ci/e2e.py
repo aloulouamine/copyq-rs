@@ -7,6 +7,23 @@ DATA = os.path.expanduser("~/Library/Application Support/com.amine.copyq-rs")
 os.makedirs(DATA, exist_ok=True)
 
 
+def stored_rows():
+    """(texte, sensible) du plus récent au plus ancien."""
+    src = os.path.join(DATA, "history.db")
+    if not os.path.exists(src):
+        return []
+    snap = tempfile.mkdtemp()
+    for suffix in ("", "-wal"):
+        if os.path.exists(src + suffix):
+            shutil.copy(src + suffix, os.path.join(snap, "h.db" + suffix))
+    con = sqlite3.connect(os.path.join(snap, "h.db"))
+    try:
+        return [(r[0], bool(r[1])) for r in con.execute("SELECT text, sensitive FROM items ORDER BY id DESC")]
+    finally:
+        con.close()
+        shutil.rmtree(snap, ignore_errors=True)
+
+
 def stored_texts():
     """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité
     du format). Turso verrouille le fichier pendant que l'app tourne : on lit une copie
@@ -60,7 +77,9 @@ try:
     check("l'app tourne", app.poll() is None)
 
     texts = stored_texts()
-    check("l'ancien history.json est importé dans la base (10 éléments)", len(texts) == 10)
+    check("l'ancien history.json est importé dans la base (11 éléments)", len(texts) == 11)
+    check("le mot de passe importé reste marqué masqué",
+          ("hunter2-MotDePasse!", True) in stored_rows())
     check("l'ordre est conservé à l'import", bool(texts) and texts[0] == "https://github.com/emilk/egui")
     check("le JSON est renommé après import", os.path.exists(os.path.join(DATA, "history.json.migrated")))
 
@@ -106,7 +125,26 @@ time.sleep(4)
 app.terminate()
 app.wait(timeout=10)
 restart_log = open("e2e-app2.log").read()
-check("au redémarrage, la base est relue (12 éléments)", "base ouverte : 12 éléments" in restart_log)
+check("au redémarrage, la base est relue (13 éléments)", "base ouverte : 13 éléments" in restart_log)
+
+# Réglage « Enregistrer les mots de passe » activé : la copie confidentielle est gardée, masquée.
+settings_path = os.path.join(DATA, "settings.json")
+with open(settings_path, "w") as f:
+    f.write('{"save_passwords": true}')
+app = subprocess.Popen([BIN], stdout=open("e2e-app3.log", "w"), stderr=subprocess.STDOUT)
+time.sleep(4)
+try:
+    allowed = f"secret-autorise-{uuid.uuid4().hex[:8]}"
+    copy_concealed(allowed)
+    time.sleep(2)
+    rows = stored_rows()
+    check("réglage activé : le mot de passe est enregistré", any(t == allowed for t, _ in rows))
+    check("réglage activé : il est marqué masqué", (allowed, True) in rows)
+    check("réglage relu au démarrage", "save_passwords: true" in open("e2e-app3.log").read())
+finally:
+    app.terminate()
+    app.wait(timeout=10)
+    os.remove(settings_path)
 
 print(open("e2e-app.log").read())
 sys.exit(1 if failures else 0)
