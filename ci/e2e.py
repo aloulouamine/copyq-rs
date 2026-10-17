@@ -1,6 +1,6 @@
 """Tests de bout en bout sur un vrai Mac (CI) : lance l'app, copie du texte,
 vérifie ce qui est enregistré. Usage : python3 ci/e2e.py <binaire>"""
-import os, sqlite3, subprocess, sys, time, uuid
+import os, shutil, sqlite3, subprocess, sys, tempfile, time, uuid
 
 BIN = sys.argv[1]
 DATA = os.path.expanduser("~/Library/Application Support/com.amine.copyq-rs")
@@ -8,15 +8,22 @@ os.makedirs(DATA, exist_ok=True)
 
 
 def stored_texts():
-    """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité)."""
-    path = os.path.join(DATA, "history.db")
-    if not os.path.exists(path):
+    """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité
+    du format). Turso verrouille le fichier pendant que l'app tourne : on lit une copie
+    (base + journal WAL)."""
+    src = os.path.join(DATA, "history.db")
+    if not os.path.exists(src):
         return []
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+    snap = tempfile.mkdtemp()
+    for suffix in ("", "-wal"):
+        if os.path.exists(src + suffix):
+            shutil.copy(src + suffix, os.path.join(snap, "h.db" + suffix))
+    con = sqlite3.connect(os.path.join(snap, "h.db"))
     try:
         return [r[0] for r in con.execute("SELECT text FROM items ORDER BY id DESC")]
     finally:
         con.close()
+        shutil.rmtree(snap, ignore_errors=True)
 
 
 def pbcopy(text):
