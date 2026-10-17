@@ -18,6 +18,8 @@ pub struct Settings {
     pub hide_after_copy: bool,
     /// Enregistrer les images copiées (captures d'écran…).
     pub save_images: bool,
+    /// Coller l'élément choisi dans l'application d'où l'historique a été ouvert.
+    pub auto_paste: bool,
 }
 
 impl Default for Settings {
@@ -27,6 +29,7 @@ impl Default for Settings {
             detect_passwords: true,
             hide_after_copy: true,
             save_images: true,
+            auto_paste: true,
         }
     }
 }
@@ -87,6 +90,7 @@ mod tests {
             detect_passwords: false,
             hide_after_copy: false,
             save_images: false,
+            auto_paste: false,
         };
         s.save(&path);
         assert_eq!(Settings::load(&path), s);

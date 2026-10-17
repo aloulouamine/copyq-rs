@@ -66,6 +66,8 @@ pub fn hide_window(ctx: &egui::Context) {
 }
 
 pub fn show_window(ctx: &egui::Context) {
+    // Retenir où l'on travaillait, pour y coller l'élément choisi.
+    crate::paste::remember_frontmost();
     #[cfg(target_os = "macos")]
     imp::show();
     #[cfg(not(target_os = "macos"))]
@@ -88,6 +90,7 @@ pub fn toggle_window(ctx: &egui::Context) {
 /// Comme `show_window`, mais utilisable hors du thread principal (ex. socket
 /// d'instance unique). Le passage au premier plan est fait par egui (Focus).
 pub fn show_window_from_any_thread(ctx: &egui::Context) {
+    crate::paste::remember_frontmost();
     #[cfg(target_os = "macos")]
     imp::unhide_from_any_thread();
     #[cfg(not(target_os = "macos"))]

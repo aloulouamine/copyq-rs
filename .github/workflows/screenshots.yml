@@ -47,6 +47,9 @@ jobs:
       - name: Images et fichiers (écriture / relecture du presse-papiers)
         run: ./target/release/copyq-rs --media-selftest 2>&1 | tee media.log
 
+      - name: Collage automatique (⌘V dans une autre app)
+        run: bash ci/paste_test.sh 2>&1 | tee paste.log
+
       - name: Tests de bout en bout (vrai presse-papiers macOS)
         run: python3 ci/e2e.py ./target/release/copyq-rs 2>&1 | tee e2e.log
 
@@ -89,7 +92,7 @@ jobs:
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log media.log /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log media.log paste.log /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b ci-results
           git config user.name "github-actions"

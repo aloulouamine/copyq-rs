@@ -11,6 +11,7 @@ mod keychain;
 mod logging;
 mod media;
 mod login_item;
+mod paste;
 mod pasteboard;
 mod platform;
 mod settings;
@@ -28,6 +29,10 @@ fn main() -> eframe::Result<()> {
     }
     if std::env::args().any(|a| a == "--keychain-selftest") {
         std::process::exit(keychain::selftest());
+    }
+    if let Some(pos) = std::env::args().position(|a| a == "--paste-selftest") {
+        let text = std::env::args().nth(pos + 1).unwrap_or_else(|| "copyq-rs".into());
+        std::process::exit(paste::selftest(&text));
     }
     if std::env::args().any(|a| a == "--media-selftest") {
         std::process::exit(clipboard::media_selftest());

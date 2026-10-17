@@ -4,7 +4,7 @@ use crate::history::{self, History, ItemKind};
 use crate::logging::LockExt;
 use crate::settings::{self, Settings};
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, icons, login_item, media, platform, storage, tray};
+use crate::{clipboard, hotkey, icons, login_item, media, paste, platform, storage, tray};
 use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
@@ -123,6 +123,7 @@ pub struct CopyApp {
 impl CopyApp {
     pub fn new(cc: &eframe::CreationContext<'_>, history: Arc<Mutex<History>>) -> Self {
         theme::install(&cc.egui_ctx);
+        paste::init();
 
         let settings = Settings::load(&settings::default_path());
         log::info!("réglages : {settings:?}");
@@ -280,6 +281,22 @@ impl CopyApp {
         self.history.lock_safe().push_item(item);
         self.selected = 0;
         self.scroll_to_selected = true;
+        if self.settings.auto_paste {
+            // Masquer d'abord : l'application d'origine reprend la main, puis ⌘V.
+            self.query.clear();
+            platform::hide_window(ctx);
+            match paste::paste_into_previous() {
+                paste::Outcome::Pasted => {}
+                paste::Outcome::NotTrusted => {
+                    self.notify_error(
+                        "Copié. Pour coller automatiquement, autorisez CopyQ-rs dans \
+                         Réglages Système → Accessibilité",
+                    );
+                }
+                paste::Outcome::NoTarget => self.notify("Copié — faites ⌘V"),
+            }
+            return;
+        }
         self.notify("Copié dans le presse-papiers");
         if self.settings.hide_after_copy {
             self.query.clear();
@@ -305,11 +322,40 @@ impl CopyApp {
 
         let mut changed = false;
         ui.horizontal(|ui| {
-            changed |= toggle(ui, &mut self.settings.hide_after_copy, "Masquer après copie", p)
-                .changed();
+            if toggle(ui, &mut self.settings.auto_paste, "Coller automatiquement", p).changed() {
+                changed = true;
+                if self.settings.auto_paste && !paste::is_trusted() {
+                    paste::request_trust();
+                }
+            }
         });
-        caption(ui, "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.", p);
+        caption(
+            ui,
+            "L'élément choisi est collé directement dans l'application d'où vous avez ouvert \
+             l'historique (⌘⇧Z).",
+            p,
+        );
+        if self.settings.auto_paste && !paste::is_trusted() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new("⚠ Autorisation « Accessibilité » requise.")
+                        .size(11.5)
+                        .color(p.danger),
+                );
+                if ghost_button(ui, "Ouvrir les réglages", p.accent, p).clicked() {
+                    paste::open_accessibility_settings();
+                }
+            });
+        }
         ui.add_space(8.0);
+        if !self.settings.auto_paste {
+            ui.horizontal(|ui| {
+                changed |= toggle(ui, &mut self.settings.hide_after_copy, "Masquer après copie", p)
+                    .changed();
+            });
+            caption(ui, "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.", p);
+            ui.add_space(8.0);
+        }
 
         ui.horizontal(|ui| {
             if toggle(ui, &mut self.settings.save_images, "Enregistrer les images", p).changed() {
@@ -677,7 +723,7 @@ impl eframe::App for CopyApp {
                     for (key, label) in [
                         ("⌘⇧Z", "ouvrir"),
                         ("↑↓", "naviguer"),
-                        ("entrée", "copier"),
+                        ("entrée", if self.settings.auto_paste { "coller" } else { "copier" }),
                         ("⌘⌫", "supprimer"),
                         ("esc", "fermer"),
                     ] {
