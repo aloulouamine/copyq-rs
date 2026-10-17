@@ -816,7 +816,11 @@ fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> egui::Respons
         resp.mark_changed();
     }
     let t = ui.ctx().animate_bool(resp.id, *on);
-    let off_color = if ui.visuals().dark_mode { p.border } else { Color32::from_rgb(0xD6, 0xD6, 0xDE) };
+    let off_color = if ui.visuals().dark_mode {
+        Color32::from_rgb(0x48, 0x48, 0x52)
+    } else {
+        Color32::from_rgb(0xD6, 0xD6, 0xDE)
+    };
     let track = lerp_color(off_color, p.accent, t);
     let radius = rect.height() / 2.0;
     ui.painter().rect_filled(rect, Rounding::same(radius), track);

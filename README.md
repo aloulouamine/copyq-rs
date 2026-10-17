@@ -13,12 +13,12 @@ Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](http
 - Icône dans la barre des menus (Afficher l'historique / Quitter) ; fermer la fenêtre la masque seulement
 - Thème moderne clair / sombre qui suit le réglage de macOS
 - Interrupteur **Pause** pour ne pas enregistrer ce que vous copiez
-- Interrupteur **Au démarrage** (ouverture de session ; nécessite l'app empaquetée `.app`)
+- Panneau **Réglages** : masquer après copie, ouvrir au démarrage (nécessite l'app empaquetée `.app`), enregistrer les mots de passe — conservés dans `settings.json`
 
 ## Robustesse
 
 - **Économe** : seul le compteur de changements du presse-papiers est consulté (toutes les 300 ms) ; le contenu n'est lu que lorsqu'il change
-- **Mots de passe ignorés** : les copies marquées confidentielles ou temporaires (1Password, Bitwarden, trousseau… — convention nspasteboard.org) ne sont ni lues ni enregistrées
+- **Mots de passe ignorés par défaut** : les copies marquées confidentielles ou temporaires (1Password, Bitwarden, trousseau… — convention nspasteboard.org) ne sont ni lues ni enregistrées. Réglable dans **Réglages → Enregistrer les mots de passe** : ils sont alors gardés mais affichés masqués (••••) et exclus de la recherche ; un bouton permet de tous les effacer
 - **Pas de plantage en cascade** : verrous récupérables, panics consignés
 - **Journal** : `~/Library/Logs/copyq-rs/copyq-rs.log`
 - **Base dans un thread dédié** : l'interface n'attend jamais le disque ; tout est écrit avant de quitter
@@ -55,6 +55,7 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/logging.rs` | Journal fichier, gestion des panics, verrous récupérables |
 | `src/single_instance.rs` | Instance unique (verrou + socket Unix) |
 | `src/login_item.rs` | Ouverture au démarrage (`SMAppService`) |
+| `src/settings.rs` | Réglages persistants (`settings.json`) |
 | `src/app.rs` | Interface egui et raccourcis clavier |
 | `src/icons.rs` | Icônes vectorielles |
 | `src/theme.rs` | Thème clair / sombre (suit macOS), police SF Pro |
