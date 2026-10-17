@@ -383,7 +383,7 @@ impl CopyApp {
         }
         // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
         if std::mem::take(&mut self.open_settings_on_start) {
-            egui::Popup::open_id(ctx, egui::Id::new(SETTINGS_POPUP));
+            egui::Popup::open_id(ctx, egui::Id::unique(SETTINGS_POPUP));
         }
         // Fermer la fenêtre = la masquer ; l'application reste dans la barre des menus.
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -488,7 +488,7 @@ impl CopyApp {
         };
         let edit = ui.add(
             egui::TextEdit::singleline(&mut self.query)
-                .frame(false)
+                .frame(Frame::NONE)
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
                 .hint_text(RichText::new("Rechercher dans l'historique…").color(p.text_faint))
@@ -556,7 +556,7 @@ impl CopyApp {
         }
         let button = ghost_button(ui, "Réglages", p.text_muted, p);
         egui::Popup::from_toggle_button_response(&button)
-            .id(egui::Id::new(SETTINGS_POPUP))
+            .id(egui::Id::unique(SETTINGS_POPUP))
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .align(egui::RectAlign::TOP_END)
             .show(|ui| self.settings_ui(ui, p));
@@ -660,7 +660,7 @@ impl CopyApp {
         let remaining = (toast.duration - elapsed).as_secs_f32();
         let alpha = (remaining / 0.3).min(1.0);
         let dot = if toast.error { p.danger } else { p.success };
-        egui::Area::new(egui::Id::new("toast"))
+        egui::Area::new(egui::Id::unique("toast"))
             .anchor(Align2::CENTER_BOTTOM, egui::vec2(0.0, -86.0))
             .interactable(false)
             .show(ctx, |ui| {
