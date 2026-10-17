@@ -65,7 +65,10 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/paste.rs` | Collage automatique (app d'origine, ⌘V simulé) |
 | `src/crypto.rs` | Chiffrement AES-256-GCM et empreintes HMAC |
 | `src/keychain.rs` | Clé de chiffrement dans le trousseau macOS |
-| `src/app.rs` | Interface egui et raccourcis clavier |
+| `src/app/mod.rs` | Interface egui : état, recherche, pied de page, raccourcis clavier |
+| `src/app/row.rs` | Lignes de la liste : aperçu, icône, vignette, actions |
+| `src/app/settings_panel.rs` | Panneau Réglages (Général, Limites) |
+| `src/app/widgets.rs` | Petits composants (interrupteur, touches, légendes) |
 | `src/icons.rs` | Icônes vectorielles |
 | `src/theme.rs` | Thème clair / sombre (suit macOS), police SF Pro |
 | `src/hotkey.rs` | Raccourci global ⌘⇧Z |
