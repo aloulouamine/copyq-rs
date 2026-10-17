@@ -121,10 +121,6 @@ impl History {
         }
     }
 
-    pub fn limits(&self) -> Limits {
-        self.limits
-    }
-
     /// Change les limites et les applique tout de suite ; renvoie le nombre
     /// d'éléments supprimés.
     pub fn set_limits(&mut self, limits: Limits, now: u64) -> usize {

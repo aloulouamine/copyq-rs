@@ -364,7 +364,17 @@ impl CopyApp {
         let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(label).size(12.5).color(p.text));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| add(ui));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Champs bien visibles : cadre, largeur minimale.
+                    let v = ui.visuals_mut();
+                    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active] {
+                        w.bg_stroke = Stroke::new(1.0_f32, p.border);
+                    }
+                    v.widgets.inactive.bg_fill = p.bg;
+                    v.widgets.inactive.weak_bg_fill = p.bg;
+                    ui.spacing_mut().interact_size.x = 78.0;
+                    add(ui)
+                });
             });
             caption(ui, help, p);
             ui.add_space(6.0);
