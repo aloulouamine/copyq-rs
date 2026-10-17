@@ -38,6 +38,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 ] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
+    "libc",
     "NSApplication",
     "NSPasteboard",
     "NSPasteboardItem",
@@ -47,6 +48,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 ] }
 objc2-service-management = { version = "0.3", default-features = false, features = [
     "std",
+    "objc2",
     "SMAppService",
     "objc2-foundation",
 ] }

@@ -14,8 +14,8 @@ pub fn register(ctx: &egui::Context) -> Result<GlobalHotKeyManager, Box<dyn Erro
     // (sur AZERTY, ce n'est pas la même position qu'en QWERTY).
     let key = keyboard::code_for_char('z').unwrap_or(Code::KeyZ);
     log::info!("Raccourci global : ⌘⇧Z (touche physique {key:?})");
-    // SUPER = touche ⌘ sur macOS.
-    let hotkey = HotKey::new(Some(Modifiers::SUPER | Modifiers::SHIFT), key);
+    // META = touche ⌘ sur macOS.
+    let hotkey = HotKey::new(Some(Modifiers::META | Modifiers::SHIFT), key);
     manager.register(hotkey)?;
 
     let id = hotkey.id();

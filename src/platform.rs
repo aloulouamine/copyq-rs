@@ -11,6 +11,7 @@ use eframe::egui;
 mod imp {
     use objc2::{sel, MainThreadMarker};
     use objc2_app_kit::NSApplication;
+    use objc2_foundation::NSObjectNSThreadPerformAdditions;
 
     /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
     fn app() -> Option<objc2::rc::Retained<NSApplication>> {

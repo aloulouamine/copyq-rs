@@ -34,8 +34,8 @@ pub fn create(ctx: &egui::Context) -> Result<TrayIcon, Box<dyn Error>> {
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("CopyQ-rs")
-        .with_icon(icon()?)
-        .with_icon_as_template(true)
+        // Gabarit : macOS adapte la couleur au thème de la barre des menus.
+        .with_icon_templated(icon()?)
         .build()?;
     Ok(tray)
 }
