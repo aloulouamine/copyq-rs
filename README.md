@@ -18,7 +18,8 @@ Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](http
 ## Robustesse
 
 - **Économe** : seul le compteur de changements du presse-papiers est consulté (toutes les 300 ms) ; le contenu n'est lu que lorsqu'il change
-- **Mots de passe ignorés par défaut** : les copies marquées confidentielles ou temporaires (1Password, Bitwarden, trousseau… — convention nspasteboard.org) ne sont ni lues ni enregistrées. Réglable dans **Réglages → Enregistrer les mots de passe** : ils sont alors gardés mais affichés masqués (••••) et exclus de la recherche ; un bouton permet de tous les effacer
+- **Mots de passe ignorés par défaut** : les copies marquées confidentielles ou temporaires (1Password, Bitwarden, trousseau… — convention nspasteboard.org) ne sont ni lues ni enregistrées. Réglable dans **Réglages → Enregistrer les mots de passe** : ils sont alors gardés, affichés masqués (••••) et exclus de la recherche ; un bouton permet de tous les effacer
+- **Mots de passe chiffrés** : AES-256-GCM (nonce aléatoire par élément), clé de 256 bits générée au premier besoin et conservée dans le **trousseau macOS** (service `com.amine.copyq-rs`, compte `history-encryption-key`) ; doublons et suppressions via une empreinte HMAC-SHA256. Si le trousseau est inaccessible, un mot de passe n'est **jamais** écrit en clair (il reste en mémoire). Les mots de passe stockés en clair par la v0.2 sont chiffrés au lancement.
 - **Pas de plantage en cascade** : verrous récupérables, panics consignés
 - **Journal** : `~/Library/Logs/copyq-rs/copyq-rs.log`
 - **Base dans un thread dédié** : l'interface n'attend jamais le disque ; tout est écrit avant de quitter
@@ -56,6 +57,8 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/single_instance.rs` | Instance unique (verrou + socket Unix) |
 | `src/login_item.rs` | Ouverture au démarrage (`SMAppService`) |
 | `src/settings.rs` | Réglages persistants (`settings.json`) |
+| `src/crypto.rs` | Chiffrement AES-256-GCM et empreintes HMAC |
+| `src/keychain.rs` | Clé de chiffrement dans le trousseau macOS |
 | `src/app.rs` | Interface egui et raccourcis clavier |
 | `src/icons.rs` | Icônes vectorielles |
 | `src/theme.rs` | Thème clair / sombre (suit macOS), police SF Pro |
