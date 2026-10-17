@@ -1,0 +1,58 @@
+name: Audit qualité
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/audit.yml"]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  audit:
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust stable + composants
+        run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: audit-${{ hashFiles('Cargo.toml') }}
+          restore-keys: audit-
+      - name: Clippy (règles par défaut)
+        run: cargo clippy --all-targets 2>&1 | tee clippy-default.log || true
+      - name: Clippy (pedantic)
+        run: cargo clippy --all-targets -- -W clippy::pedantic 2>&1 | tee clippy-pedantic.log || true
+      - name: Formatage
+        run: cargo fmt --check 2>&1 | tee fmt.log || true
+      - name: Failles connues (RustSec)
+        run: |
+          command -v cargo-audit || cargo install cargo-audit --locked
+          cargo audit 2>&1 | tee audit.log || true
+      - name: Dépendances
+        run: |
+          cargo tree -d --depth 0 2>&1 | tee duplicates.log || true
+          cargo tree --prefix none --edges normal 2>/dev/null | sort -u | wc -l | tee deps-count.log
+          cargo update --dry-run --verbose 2>&1 | tee outdated.log || true
+          ls -la target/release/copyq-rs 2>/dev/null | tee -a deps-count.log || true
+      - name: Publier (branche ci-audit)
+        if: always()
+        run: |
+          mkdir -p /tmp/out && cp *.log /tmp/out/ 2>/dev/null || true
+          cd /tmp/out
+          git init -q -b ci-audit
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          echo "${GITHUB_SHA}" > commit.txt
+          git add -A && git commit -qm "Audit ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-audit
