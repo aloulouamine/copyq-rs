@@ -6,6 +6,8 @@ Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](http
 
 - Enregistre automatiquement tout texte copié (500 derniers éléments, doublons remontés en tête)
 - Historique persistant dans une base [Turso](https://github.com/tursodatabase/turso) (SQLite réécrit en Rust) : `~/Library/Application Support/com.amine.copyq-rs/history.db` — l'ancien `history.json` est importé automatiquement
+- **Images** (captures d'écran, « Copier l'image »…) : vignette dans la liste, aperçu au survol, recopie en un clic ; PNG sans perte dans `…/com.amine.copyq-rs/images/`, 50 images au plus (réglage **Enregistrer les images**)
+- **Fichiers copiés dans le Finder** (vidéos, sons, PDF, dossiers…) : gardés par leur emplacement, recopiables pour les coller ailleurs ; signalés « introuvable » s'ils ont été déplacés
 - Recherche instantanée (tous les mots, insensible à la casse)
 - Clic ou **Entrée** : remet l'élément dans le presse-papiers et masque la fenêtre → il suffit de faire ⌘V
 - Navigation **↑ / ↓**, **⌘⌫** supprime l'élément sélectionné, **Échap** vide la recherche puis masque
@@ -58,6 +60,7 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/single_instance.rs` | Instance unique (verrou + socket Unix) |
 | `src/login_item.rs` | Ouverture au démarrage (`SMAppService`) |
 | `src/settings.rs` | Réglages persistants (`settings.json`) |
+| `src/media.rs` | Images : PNG, vignettes, empreintes |
 | `src/crypto.rs` | Chiffrement AES-256-GCM et empreintes HMAC |
 | `src/keychain.rs` | Clé de chiffrement dans le trousseau macOS |
 | `src/app.rs` | Interface egui et raccourcis clavier |

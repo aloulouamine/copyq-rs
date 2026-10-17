@@ -10,6 +10,7 @@ use eframe::egui::{
     RichText, Rounding, Sense, Stroke, Ui,
 };
 use std::collections::HashMap;
+use unicode_normalization::UnicodeNormalization;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -217,10 +218,12 @@ impl CopyApp {
                         }
                         ItemKind::Files => {
                             let paths = it.paths();
+                            // macOS fournit les noms de fichiers décomposés (NFD : « e » +
+                            // accent) ; on les recompose pour un affichage correct.
                             let name = |p: &std::path::Path| {
                                 p.file_name()
-                                    .map(|n| n.to_string_lossy().into_owned())
-                                    .unwrap_or_else(|| p.display().to_string())
+                                    .map(|n| n.to_string_lossy().nfc().collect::<String>())
+                                    .unwrap_or_else(|| p.display().to_string().nfc().collect())
                             };
                             row.title = match paths.len() {
                                 0 => "Fichier".into(),
@@ -978,7 +981,7 @@ fn load_thumbnail(ctx: &egui::Context, hash: &str) -> Option<egui::TextureHandle
 
 /// Remplace le dossier personnel par « ~ ».
 fn shorten_home(dir: &std::path::Path) -> String {
-    let s = dir.display().to_string();
+    let s: String = dir.display().to_string().nfc().collect();
     match directories::BaseDirs::new() {
         Some(b) => {
             let home = b.home_dir().display().to_string();
