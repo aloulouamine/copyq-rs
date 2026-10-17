@@ -489,6 +489,8 @@ impl CopyApp {
         let edit = ui.add(
             egui::TextEdit::singleline(&mut self.query)
                 .frame(Frame::NONE)
+                // Même marge intérieure qu'avant egui 0.37 : texte centré sur la loupe.
+                .margin(Margin::symmetric(4, 2))
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
                 .hint_text(RichText::new("Rechercher dans l'historique…").color(p.text_faint))
