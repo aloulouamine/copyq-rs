@@ -34,8 +34,9 @@ fn classify(
     paused: bool,
     types: impl FnOnce() -> Vec<String>,
 ) -> Change {
+    let previous = *last_count;
     if let Some(c) = count {
-        if *last_count == Some(c) {
+        if previous == Some(c) {
             return Change::None;
         }
         *last_count = Some(c);
@@ -43,7 +44,15 @@ fn classify(
     if paused {
         return Change::Skip("pause");
     }
-    if pasteboard::should_ignore(&types()) {
+    let types = types();
+    if count.is_some() && types.is_empty() {
+        // macOS incrémente le compteur quand une app *vide* le presse-papiers, avant
+        // qu'elle n'y écrive (sans nouvel incrément). On ne mémorise donc pas ce
+        // compteur : on réessaiera au prochain tour, une fois le contenu écrit.
+        *last_count = previous;
+        return Change::None;
+    }
+    if pasteboard::should_ignore(&types) {
         return Change::Skip("contenu confidentiel");
     }
     Change::Read
@@ -136,6 +145,17 @@ mod tests {
         let mut last = Some(1);
         let r = classify(&mut last, Some(2), true, || panic!("types lus pendant la pause"));
         assert_eq!(r, Change::Skip("pause"));
+    }
+
+    #[test]
+    fn cleared_but_not_yet_written_is_retried() {
+        let mut last = Some(1);
+        // L'app source vient de vider le presse-papiers : rien à lire encore.
+        assert_eq!(classify(&mut last, Some(2), false, Vec::new), Change::None);
+        assert_eq!(last, Some(1), "le compteur ne doit pas être mémorisé");
+        // Le contenu est écrit (même compteur) : on le lit bien.
+        assert_eq!(classify(&mut last, Some(2), false, plain), Change::Read);
+        assert_eq!(last, Some(2));
     }
 
     #[test]

@@ -35,6 +35,7 @@ def copy_concealed(text):
     ObjC.import('AppKit');
     var pb = $.NSPasteboard.generalPasteboard;
     pb.clearContents;
+    delay(0.8);  // laisse l'app voir le presse-papiers vide (cas réel de course)
     pb.setStringForType($('{text}'), $('public.utf8-plain-text'));
     pb.setStringForType($(''), $('org.nspasteboard.ConcealedType'));
     """
@@ -72,6 +73,9 @@ try:
     copy_concealed(secret)
     time.sleep(1.5)
     check("une copie confidentielle est ignorée", secret not in stored_texts())
+    content_now = open(os.path.expanduser("~/Library/Logs/copyq-rs/copyq-rs.log")).read()
+    check("…et détectée comme confidentielle malgré l'écriture en deux temps",
+          content_now.count("Copie ignorée (contenu confidentiel)") >= 1)
 
     again = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(again)
