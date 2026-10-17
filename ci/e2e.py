@@ -33,6 +33,30 @@ def db_bytes():
     return out
 
 
+def stored_kinds():
+    """(nature, texte, meta) du plus récent au plus ancien."""
+    src = os.path.join(DATA, "history.db")
+    snap = tempfile.mkdtemp()
+    for suffix in ("", "-wal"):
+        if os.path.exists(src + suffix):
+            shutil.copy(src + suffix, os.path.join(snap, "h.db" + suffix))
+    con = sqlite3.connect(os.path.join(snap, "h.db"))
+    try:
+        return list(con.execute("SELECT kind, text, meta FROM items ORDER BY copied_at DESC, id DESC"))
+    finally:
+        con.close()
+        shutil.rmtree(snap, ignore_errors=True)
+
+
+def copy_png(path):
+    subprocess.run(["osascript", "-e",
+                    f'set the clipboard to (read (POSIX file "{path}") as «class PNGf»)'], check=True)
+
+
+def copy_file(path):
+    subprocess.run(["osascript", "-e", f'set the clipboard to (POSIX file "{path}")'], check=True)
+
+
 def stored_texts():
     """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité
     du format). Turso verrouille le fichier pendant que l'app tourne : on lit une copie
@@ -115,6 +139,35 @@ try:
     check("mot de passe d'extension (non marqué) détecté et ignoré", browser_pw not in stored_texts())
     check("…et jamais écrit sur le disque", browser_pw.encode() not in db_bytes())
 
+    # Image (comme une capture d'écran).
+    png = os.path.join(tempfile.gettempdir(), "copyq-e2e.png")
+    subprocess.run([sys.executable, "ci/make_png.py", png, "321", "123"], check=True)
+    copy_png(png)
+    time.sleep(2)
+    rows = stored_kinds()
+    images = [r for r in rows if r[0] == "image"]
+    check("une image copiée est enregistrée", len(images) == 1)
+    if images:
+        _, h, meta = images[0]
+        img_dir = os.path.join(DATA, "images")
+        check("…avec ses dimensions", meta.startswith("321 × 123"))
+        check("…son fichier PNG et sa vignette",
+              os.path.exists(os.path.join(img_dir, h + ".png"))
+              and os.path.exists(os.path.join(img_dir, h + ".thumb.png")))
+    copy_png(png)
+    time.sleep(1.5)
+    check("la même image recopiée n'est pas dupliquée",
+          len([r for r in stored_kinds() if r[0] == "image"]) == 1)
+
+    # Fichier copié dans le Finder (ex. une vidéo).
+    media_file = os.path.join(tempfile.gettempdir(), "copyq e2e vidéo.mov")
+    open(media_file, "wb").write(b"\0" * 1024)
+    copy_file(media_file)
+    time.sleep(2)
+    files = [r for r in stored_kinds() if r[0] == "files"]
+    check("un fichier copié dans le Finder est enregistré",
+          len(files) == 1 and os.path.realpath(files[0][1]) == os.path.realpath(media_file))
+
     again = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(again)
     time.sleep(1.5)
@@ -144,7 +197,7 @@ time.sleep(4)
 app.terminate()
 app.wait(timeout=10)
 restart_log = open("e2e-app2.log").read()
-check("au redémarrage, la base est relue (13 éléments)", "base ouverte : 13 éléments" in restart_log)
+check("au redémarrage, la base est relue (15 éléments)", "base ouverte : 15 éléments" in restart_log)
 
 # Réglage « Enregistrer les mots de passe » activé : la copie confidentielle est gardée, masquée.
 settings_path = os.path.join(DATA, "settings.json")

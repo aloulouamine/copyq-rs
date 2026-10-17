@@ -11,8 +11,40 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const MAX_ITEMS: usize = 500;
 /// Taille maximale d'un élément (au-delà, il est ignoré).
 pub const MAX_ITEM_BYTES: usize = 1_000_000;
+/// Nombre maximal d'images conservées (les plus anciennes sont supprimées).
+pub const MAX_IMAGES: usize = 50;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Nature d'un élément.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ItemKind {
+    #[default]
+    Text,
+    /// `text` = empreinte de l'image (fichier `images/<empreinte>.png`).
+    Image,
+    /// `text` = chemins des fichiers copiés, un par ligne.
+    Files,
+}
+
+impl ItemKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ItemKind::Text => "text",
+            ItemKind::Image => "image",
+            ItemKind::Files => "files",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "image" => ItemKind::Image,
+            "files" => ItemKind::Files,
+            _ => ItemKind::Text,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Item {
     pub text: String,
     /// Horodatage Unix (secondes) de la dernière copie.
@@ -21,6 +53,22 @@ pub struct Item {
     /// exclue de la recherche.
     #[serde(default)]
     pub sensitive: bool,
+    #[serde(default)]
+    pub kind: ItemKind,
+    /// Description affichée (ex. « 1280 × 720 · 245 Ko » pour une image).
+    #[serde(default)]
+    pub meta: String,
+}
+
+impl Item {
+    pub fn text(text: impl Into<String>, copied_at: u64, sensitive: bool) -> Self {
+        Item { text: text.into(), copied_at, sensitive, ..Default::default() }
+    }
+
+    /// Chemins d'un élément « fichiers ».
+    pub fn paths(&self) -> Vec<PathBuf> {
+        self.text.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect()
+    }
 }
 
 #[derive(Default)]
@@ -69,33 +117,32 @@ impl History {
     /// Ajoute un texte en tête. Un doublon est remonté en tête au lieu d'être dupliqué
     /// (et reste masqué s'il l'était). Renvoie `true` si l'historique a changé.
     pub fn push_with(&mut self, text: String, sensitive: bool) -> bool {
-        if text.trim().is_empty() || text.len() > MAX_ITEM_BYTES {
+        self.push_item(Item::text(text, now_secs(), sensitive))
+    }
+
+    /// Ajoute un élément (texte, image, fichiers) en tête ; un doublon (même nature,
+    /// même contenu) est remonté au lieu d'être dupliqué.
+    pub fn push_item(&mut self, new: Item) -> bool {
+        if new.text.trim().is_empty() || new.text.len() > MAX_ITEM_BYTES {
             return false;
         }
-        match self.items.iter().position(|it| it.text == text) {
-            Some(0) if !sensitive || self.items[0].sensitive => return false,
+        let same = |it: &Item| it.kind == new.kind && it.text == new.text;
+        match self.items.iter().position(same) {
+            Some(0) if !new.sensitive || self.items[0].sensitive => return false,
             Some(pos) => {
                 let mut item = self.items.remove(pos);
                 item.copied_at = now_secs();
-                item.sensitive |= sensitive;
+                item.sensitive |= new.sensitive;
+                if !new.meta.is_empty() {
+                    item.meta = new.meta;
+                }
                 self.items.insert(0, item);
             }
             None => {
-                self.items.insert(
-                    0,
-                    Item {
-                        text,
-                        copied_at: now_secs(),
-                        sensitive,
-                    },
-                );
-                if self.items.len() > MAX_ITEMS {
-                    for evicted in self.items.split_off(MAX_ITEMS) {
-                        if let Some(store) = &self.store {
-                            store.delete(&evicted);
-                        }
-                    }
-                }
+                let mut item = new;
+                item.copied_at = now_secs();
+                self.items.insert(0, item);
+                self.evict();
             }
         }
         if let Some(store) = &self.store {
@@ -103,6 +150,28 @@ impl History {
         }
         self.version += 1;
         true
+    }
+
+    /// Applique les limites : `MAX_ITEMS` éléments, dont au plus `MAX_IMAGES` images.
+    fn evict(&mut self) {
+        let mut evicted = Vec::new();
+        let mut images = 0;
+        let mut kept = Vec::with_capacity(self.items.len());
+        for item in std::mem::take(&mut self.items) {
+            let is_image = item.kind == ItemKind::Image;
+            if kept.len() >= MAX_ITEMS || (is_image && images >= MAX_IMAGES) {
+                evicted.push(item);
+                continue;
+            }
+            images += usize::from(is_image);
+            kept.push(item);
+        }
+        self.items = kept;
+        if let Some(store) = &self.store {
+            for item in &evicted {
+                store.delete(item);
+            }
+        }
     }
 
     pub fn remove(&mut self, index: usize) -> Option<Item> {
@@ -142,7 +211,11 @@ impl History {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, it)| !it.sensitive && crate::pasteboard::looks_like_password(&it.text))
+            .filter(|(_, it)| {
+                it.kind == ItemKind::Text
+                    && !it.sensitive
+                    && crate::pasteboard::looks_like_password(&it.text)
+            })
             .map(|(i, _)| i)
             .collect();
         for &i in targets.iter().rev() {
@@ -201,7 +274,11 @@ impl History {
                 if it.sensitive {
                     return false;
                 }
-                let hay = it.text.to_lowercase();
+                let hay = match it.kind {
+                    // Une image se retrouve en cherchant « image » ou ses dimensions.
+                    ItemKind::Image => format!("image {}", it.meta).to_lowercase(),
+                    _ => it.text.to_lowercase(),
+                };
                 words.iter().all(|w| hay.contains(w.as_str()))
             })
             .map(|(i, _)| i)
@@ -342,6 +419,29 @@ mod tests {
     }
 
     #[test]
+    fn images_and_files_dedup_by_kind_and_are_capped() {
+        let mut h = h();
+        let img = |hash: &str| Item { text: hash.into(), kind: ItemKind::Image, meta: "1 × 1 · 1 o".into(), ..Default::default() };
+        assert!(h.push_item(img("aaa")));
+        assert!(h.push_item(Item { text: "/tmp/a.mov".into(), kind: ItemKind::Files, ..Default::default() }));
+        h.push("aaa".into()); // même contenu mais texte : élément distinct
+        assert_eq!(h.len(), 3);
+        assert!(h.push_item(img("aaa"))); // doublon : remonte
+        assert_eq!(h.len(), 3);
+        assert_eq!(h.items()[0].kind, ItemKind::Image);
+        assert_eq!(h.search("image").len(), 1);
+        assert_eq!(h.search("a.mov").len(), 1);
+
+        for i in 0..MAX_IMAGES + 5 {
+            h.push_item(img(&format!("h{i}")));
+        }
+        let images = h.items().iter().filter(|i| i.kind == ItemKind::Image).count();
+        assert_eq!(images, MAX_IMAGES, "au plus {MAX_IMAGES} images");
+        assert!(h.items().iter().any(|i| i.kind == ItemKind::Files), "le reste est conservé");
+        assert_eq!(h.items()[0].text, format!("h{}", MAX_IMAGES + 4));
+    }
+
+    #[test]
     fn caps_at_max() {
         let mut h = h();
         for i in 0..MAX_ITEMS + 10 {
@@ -371,7 +471,7 @@ mod tests {
         let db = dir.join("h.db");
         let key = crate::crypto::generate_key();
         {
-            let (store, items) = Store::open(db.clone(), None, Box::new(move || Ok(key))).unwrap();
+            let (store, items) = Store::open(db.clone(), None, None, Box::new(move || Ok(key))).unwrap();
             let mut h = History::with_store(store.clone(), items);
             h.push("un".into());
             h.push("deux".into());
@@ -380,7 +480,7 @@ mod tests {
             h.remove(1); // supprime « trois »
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db, None, Box::new(move || Ok(key))).unwrap();
+        let (store, items) = Store::open(db, None, None, Box::new(move || Ok(key))).unwrap();
         let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, vec!["un", "deux"]);
         store.close(Duration::from_secs(5));

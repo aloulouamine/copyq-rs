@@ -16,6 +16,8 @@ pub struct Settings {
     pub detect_passwords: bool,
     /// Masquer la fenêtre après avoir choisi un élément.
     pub hide_after_copy: bool,
+    /// Enregistrer les images copiées (captures d'écran…).
+    pub save_images: bool,
 }
 
 impl Default for Settings {
@@ -24,6 +26,7 @@ impl Default for Settings {
             save_passwords: false,
             detect_passwords: true,
             hide_after_copy: true,
+            save_images: true,
         }
     }
 }
@@ -79,7 +82,12 @@ mod tests {
         let path = dir.join("settings.json");
         assert_eq!(Settings::load(&path), Settings::default(), "fichier absent");
 
-        let s = Settings { save_passwords: true, detect_passwords: false, hide_after_copy: false };
+        let s = Settings {
+            save_passwords: true,
+            detect_passwords: false,
+            hide_after_copy: false,
+            save_images: false,
+        };
         s.save(&path);
         assert_eq!(Settings::load(&path), s);
 

@@ -12,7 +12,7 @@
 //! écrit en clair : il reste en mémoire seulement.
 
 use crate::crypto::{self, Cipher, Key};
-use crate::history::Item;
+use crate::history::{Item, ItemKind};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::OnceLock;
@@ -51,6 +51,7 @@ impl Store {
     pub fn open(
         db_path: PathBuf,
         legacy_json: Option<PathBuf>,
+        images_dir: Option<PathBuf>,
         keys: KeyProvider,
     ) -> Result<(Store, Vec<Item>), String> {
         if let Some(dir) = db_path.parent() {
@@ -60,7 +61,7 @@ impl Store {
         let (ready_tx, ready_rx) = mpsc::channel::<Result<Vec<Item>, String>>();
         thread::Builder::new()
             .name("storage".into())
-            .spawn(move || worker(db_path, legacy_json, keys, rx, ready_tx))
+            .spawn(move || worker(db_path, legacy_json, images_dir, keys, rx, ready_tx))
             .map_err(|e| e.to_string())?;
         // Délai généreux : le trousseau peut demander une autorisation à l'utilisateur.
         let items = ready_rx
@@ -109,6 +110,7 @@ pub fn default_db_path() -> PathBuf {
 fn worker(
     db_path: PathBuf,
     legacy_json: Option<PathBuf>,
+    images_dir: Option<PathBuf>,
     keys: KeyProvider,
     rx: Receiver<Cmd>,
     ready: Sender<Result<Vec<Item>, String>>,
@@ -140,8 +142,22 @@ fn worker(
     for cmd in rx.iter() {
         let result = match cmd {
             Cmd::Upsert(item) => rt.block_on(db.upsert(&item)),
-            Cmd::Delete(item) => rt.block_on(db.delete(&item)),
-            Cmd::Clear => rt.block_on(db.exec("DELETE FROM items")),
+            Cmd::Delete(item) => {
+                let r = rt.block_on(db.delete(&item));
+                if item.kind == ItemKind::Image {
+                    if let Some(dir) = &images_dir {
+                        crate::media::remove(dir, &item.text);
+                    }
+                }
+                r
+            }
+            Cmd::Clear => {
+                let r = rt.block_on(db.exec("DELETE FROM items"));
+                if let Some(dir) = &images_dir {
+                    crate::media::remove_all(dir);
+                }
+                r
+            }
             Cmd::Shutdown(ack) => {
                 shutdown_ack = Some(ack);
                 break;
@@ -171,6 +187,8 @@ struct Row {
     text: String,
     copied_at: u64,
     sensitive: bool,
+    kind: ItemKind,
+    meta: String,
 }
 
 impl Db {
@@ -187,7 +205,9 @@ impl Db {
                 text TEXT NOT NULL,
                 copied_at INTEGER NOT NULL,
                 sensitive INTEGER NOT NULL DEFAULT 0,
-                fingerprint TEXT
+                fingerprint TEXT,
+                kind TEXT NOT NULL DEFAULT 'text',
+                meta TEXT NOT NULL DEFAULT ''
             )",
             (),
         )
@@ -196,6 +216,8 @@ impl Db {
         let db = Db { conn, keys, cipher: None };
         db.add_column_if_missing("sensitive", "INTEGER NOT NULL DEFAULT 0").await?;
         db.add_column_if_missing("fingerprint", "TEXT").await?;
+        db.add_column_if_missing("kind", "TEXT NOT NULL DEFAULT 'text'").await?;
+        db.add_column_if_missing("meta", "TEXT NOT NULL DEFAULT ''").await?;
         Ok(db)
     }
 
@@ -248,7 +270,7 @@ impl Db {
 
     async fn rows(&self) -> Result<Vec<Row>, String> {
         let sql = format!(
-            "SELECT id, text, copied_at, sensitive FROM items ORDER BY copied_at DESC, id DESC LIMIT {LOAD_LIMIT}"
+            "SELECT id, text, copied_at, sensitive, kind, meta FROM items ORDER BY copied_at DESC, id DESC LIMIT {LOAD_LIMIT}"
         );
         let mut rows = self.conn.query(&sql, ()).await.map_err(|e| e.to_string())?;
         let mut out = Vec::new();
@@ -257,12 +279,18 @@ impl Db {
                 Ok(turso::Value::Integer(v)) => Some(v),
                 _ => None,
             };
-            let Ok(turso::Value::Text(text)) = row.get_value(1) else { continue };
+            let text_at = |i: usize| match row.get_value(i) {
+                Ok(turso::Value::Text(t)) => Some(t),
+                _ => None,
+            };
+            let Some(text) = text_at(1) else { continue };
             out.push(Row {
                 id: int(0).unwrap_or(0),
                 text,
                 copied_at: int(2).unwrap_or(0).max(0) as u64,
                 sensitive: int(3).unwrap_or(0) != 0,
+                kind: ItemKind::parse(text_at(4).as_deref().unwrap_or("text")),
+                meta: text_at(5).unwrap_or_default(),
             });
         }
         Ok(out)
@@ -303,7 +331,13 @@ impl Db {
                 }
                 row.text
             };
-            items.push(Item { text, copied_at: row.copied_at, sensitive: row.sensitive });
+            items.push(Item {
+                text,
+                copied_at: row.copied_at,
+                sensitive: row.sensitive,
+                kind: row.kind,
+                meta: row.meta,
+            });
         }
         if upgraded > 0 {
             log::info!("{upgraded} mot(s) de passe stocké(s) en clair désormais chiffré(s)");
@@ -345,25 +379,29 @@ impl Db {
                         .map_err(|e| e.to_string())?;
                     // copied_at est un entier que nous contrôlons : pas d'injection.
                     let sql = format!(
-                        "INSERT INTO items (text, copied_at, sensitive, fingerprint) VALUES (?1, {}, 1, ?2)",
+                        "INSERT INTO items (text, copied_at, sensitive, fingerprint, kind, meta) \
+                         VALUES (?1, {}, 1, ?2, ?3, ?4)",
                         item.copied_at as i64
                     );
                     self.conn
-                        .execute(&sql, [stored.as_str(), fp.as_str()])
+                        .execute(&sql, [stored.as_str(), fp.as_str(), item.kind.as_str(), item.meta.as_str()])
                         .await
                         .map_err(|e| e.to_string())?;
                 }
                 None => {
                     self.conn
-                        .execute("DELETE FROM items WHERE text = ?1", [stored.as_str()])
+                        .execute(
+                            "DELETE FROM items WHERE text = ?1 AND kind = ?2",
+                            [stored.as_str(), item.kind.as_str()],
+                        )
                         .await
                         .map_err(|e| e.to_string())?;
                     let sql = format!(
-                        "INSERT INTO items (text, copied_at, sensitive) VALUES (?1, {}, 0)",
+                        "INSERT INTO items (text, copied_at, sensitive, kind, meta) VALUES (?1, {}, 0, ?2, ?3)",
                         item.copied_at as i64
                     );
                     self.conn
-                        .execute(&sql, [stored.as_str()])
+                        .execute(&sql, [stored.as_str(), item.kind.as_str(), item.meta.as_str()])
                         .await
                         .map_err(|e| e.to_string())?;
                 }
@@ -386,7 +424,10 @@ impl Db {
         }
         // Éléments ordinaires, ou mot de passe resté en clair (version antérieure).
         self.conn
-            .execute("DELETE FROM items WHERE text = ?1", [item.text.as_str()])
+            .execute(
+                "DELETE FROM items WHERE text = ?1 AND kind = ?2",
+                [item.text.as_str(), item.kind.as_str()],
+            )
             .await
             .map(|_| ())
             .map_err(|e| e.to_string())
@@ -435,7 +476,7 @@ mod tests {
     }
 
     fn secret(text: &str, at: u64) -> Item {
-        Item { text: text.into(), copied_at: at, sensitive: true }
+        Item::text(text, at, true)
     }
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -446,7 +487,7 @@ mod tests {
     }
 
     fn item(text: &str, at: u64) -> Item {
-        Item { text: text.into(), copied_at: at, sensitive: false }
+        Item::text(text, at, false)
     }
 
     #[test]
@@ -455,7 +496,7 @@ mod tests {
         let dir = temp_dir("roundtrip");
         let db = dir.join("h.db");
         {
-            let (store, items) = Store::open(db.clone(), None, keys(k)).unwrap();
+            let (store, items) = Store::open(db.clone(), None, None, keys(k)).unwrap();
             assert!(items.is_empty());
             store.upsert(&item("a", 1));
             store.upsert(&item("b", 2));
@@ -464,14 +505,14 @@ mod tests {
             store.delete(&item("c", 0));
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db.clone(), None, keys(k)).unwrap();
+        let (store, items) = Store::open(db.clone(), None, None, keys(k)).unwrap();
         let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, vec!["a", "b"]);
         assert_eq!(items[0].copied_at, 3);
 
         store.clear();
         assert!(store.close(Duration::from_secs(5)));
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         assert!(items.is_empty());
         store.close(Duration::from_secs(5));
         let _ = std::fs::remove_dir_all(dir);
@@ -484,11 +525,11 @@ mod tests {
         let db = dir.join("h.db");
         let tricky = "l'apostrophe \"guillemets\" ; DROP TABLE items; -- 🎉\nligne 2\0fin";
         {
-            let (store, _) = Store::open(db.clone(), None, keys(k)).unwrap();
+            let (store, _) = Store::open(db.clone(), None, None, keys(k)).unwrap();
             store.upsert(&item(tricky, 1));
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, tricky);
@@ -501,12 +542,12 @@ mod tests {
         let dir = temp_dir("sensitive");
         let db = dir.join("h.db");
         {
-            let (store, _) = Store::open(db.clone(), None, keys(k)).unwrap();
-            store.upsert(&Item { text: "secret".into(), copied_at: 2, sensitive: true });
+            let (store, _) = Store::open(db.clone(), None, None, keys(k)).unwrap();
+            store.upsert(&Item::text("secret", 2, true));
             store.upsert(&item("public", 3));
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 2);
         assert!(!items[0].sensitive && items[0].text == "public");
@@ -533,13 +574,13 @@ mod tests {
             c.execute("INSERT INTO items (text, copied_at) VALUES ('ancien', 5)", ()).await.unwrap();
         });
         drop(rt);
-        let (store, items) = Store::open(db.clone(), None, keys(k)).unwrap();
+        let (store, items) = Store::open(db.clone(), None, None, keys(k)).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, "ancien");
         assert!(!items[0].sensitive);
-        store.upsert(&Item { text: "nouveau".into(), copied_at: 6, sensitive: true });
+        store.upsert(&Item::text("nouveau", 6, true));
         assert!(store.close(Duration::from_secs(5)));
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert!(items[0].sensitive);
         let _ = std::fs::remove_dir_all(dir);
@@ -552,7 +593,7 @@ mod tests {
         let db = dir.join("h.db");
         let pw = "S3cr3t-Unique-7f3a9c";
         {
-            let (store, _) = Store::open(db.clone(), None, keys(k)).unwrap();
+            let (store, _) = Store::open(db.clone(), None, None, keys(k)).unwrap();
             store.upsert(&secret(pw, 1));
             store.upsert(&item("texte ordinaire visible", 2));
             assert!(store.close(Duration::from_secs(5)));
@@ -562,14 +603,14 @@ mod tests {
         assert!(contains(&bytes, "texte ordinaire visible"));
 
         // Même clé : déchiffré au chargement.
-        let (store, items) = Store::open(db.clone(), None, keys(k)).unwrap();
+        let (store, items) = Store::open(db.clone(), None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 2);
         assert_eq!(items[1].text, pw);
         assert!(items[1].sensitive);
 
         // Autre clé : le mot de passe est ignoré, le reste est lu.
-        let (store, items) = Store::open(db, None, keys(crypto::generate_key())).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(crypto::generate_key())).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, "texte ordinaire visible");
@@ -584,13 +625,13 @@ mod tests {
         let pw = "Jamais-Ecrit-9b21";
         {
             let refuse: KeyProvider = Box::new(|| Err("accès au trousseau refusé".into()));
-            let (store, _) = Store::open(db.clone(), None, refuse).unwrap();
+            let (store, _) = Store::open(db.clone(), None, None, refuse).unwrap();
             store.upsert(&secret(pw, 1));
             store.upsert(&item("ordinaire", 2));
             assert!(store.close(Duration::from_secs(5)));
         }
         assert!(!contains(&file_bytes(&db), pw));
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items.len(), 1, "seul l'élément ordinaire est en base");
         let _ = std::fs::remove_dir_all(dir);
@@ -610,13 +651,13 @@ mod tests {
         };
         let dir = temp_dir("lazy");
         let db = dir.join("h.db");
-        let (store, _) = Store::open(db.clone(), None, counting(calls.clone())).unwrap();
+        let (store, _) = Store::open(db.clone(), None, None, counting(calls.clone())).unwrap();
         store.upsert(&item("a", 1));
         store.upsert(&item("b", 2));
         assert!(store.close(Duration::from_secs(5)));
         assert_eq!(calls.load(Ordering::SeqCst), 0, "pas de trousseau sans mot de passe");
 
-        let (store, _) = Store::open(db, None, counting(calls.clone())).unwrap();
+        let (store, _) = Store::open(db, None, None, counting(calls.clone())).unwrap();
         store.upsert(&secret("x1", 3));
         store.upsert(&secret("x2", 4));
         store.delete(&secret("x1", 0));
@@ -631,14 +672,14 @@ mod tests {
         let dir = temp_dir("fp");
         let db = dir.join("h.db");
         {
-            let (store, _) = Store::open(db.clone(), None, keys(k)).unwrap();
+            let (store, _) = Store::open(db.clone(), None, None, keys(k)).unwrap();
             store.upsert(&secret("pw-a", 1));
             store.upsert(&secret("pw-b", 2));
             store.upsert(&secret("pw-a", 3)); // doublon chiffré : remplacé, pas dupliqué
             store.delete(&secret("pw-b", 0));
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db, None, keys(k)).unwrap();
+        let (store, items) = Store::open(db, None, None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, vec!["pw-a"]);
@@ -675,13 +716,55 @@ mod tests {
         raw("CREATE TABLE items (id INTEGER PRIMARY KEY, text TEXT NOT NULL, copied_at INTEGER NOT NULL, sensitive INTEGER NOT NULL DEFAULT 0)");
         raw("INSERT INTO items (text, copied_at, sensitive) VALUES ('ancien-en-clair', 5, 1)");
 
-        let (store, items) = Store::open(db.clone(), None, keys(k)).unwrap();
+        let (store, items) = Store::open(db.clone(), None, None, keys(k)).unwrap();
         assert!(store.close(Duration::from_secs(5)));
         assert_eq!(items[0].text, "ancien-en-clair");
         assert!(items[0].sensitive);
         let stored = raw("SELECT text FROM items");
         assert_eq!(stored.len(), 1);
         assert!(crypto::is_encrypted(&stored[0]), "réécrit chiffré : {}", stored[0]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn images_and_files_roundtrip_and_image_files_are_removed() {
+        let k = crypto::generate_key();
+        let dir = temp_dir("media");
+        let db = dir.join("h.db");
+        let images = dir.join("images");
+        let px: Vec<u8> = vec![200; 4 * 4 * 4];
+        let saved = crate::media::save_rgba(&images, 4, 4, px).unwrap();
+        let image = Item {
+            text: saved.hash.clone(),
+            copied_at: 5,
+            kind: ItemKind::Image,
+            meta: saved.meta.clone(),
+            ..Default::default()
+        };
+        let files = Item {
+            text: "/tmp/vidéo.mov\n/tmp/son.m4a".into(),
+            copied_at: 6,
+            kind: ItemKind::Files,
+            ..Default::default()
+        };
+        {
+            let (store, _) = Store::open(db.clone(), None, Some(images.clone()), keys(k)).unwrap();
+            store.upsert(&image);
+            store.upsert(&files);
+            assert!(store.close(Duration::from_secs(5)));
+        }
+        let (store, items) = Store::open(db.clone(), None, Some(images.clone()), keys(k)).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], files);
+        assert_eq!(items[1], image);
+        assert_eq!(items[0].paths().len(), 2);
+
+        store.delete(&image);
+        assert!(store.close(Duration::from_secs(5)));
+        assert!(!crate::media::full_path(&images, &saved.hash).exists(), "fichier image supprimé");
+        let (store, items) = Store::open(db, None, Some(images), keys(k)).unwrap();
+        store.close(Duration::from_secs(5));
+        assert_eq!(items, vec![files]);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -696,7 +779,7 @@ mod tests {
         )
         .unwrap();
         let db = dir.join("h.db");
-        let (store, items) = Store::open(db.clone(), Some(json.clone()), keys(k)).unwrap();
+        let (store, items) = Store::open(db.clone(), Some(json.clone()), None, keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, vec!["récent", "ancien"]);

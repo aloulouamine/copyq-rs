@@ -44,6 +44,9 @@ jobs:
       - name: Trousseau macOS (clé de chiffrement)
         run: python3 -c "import subprocess,sys; sys.exit(subprocess.run(['./target/release/copyq-rs','--keychain-selftest'],timeout=60).returncode)" 2>&1 | tee keychain.log
 
+      - name: Images et fichiers (écriture / relecture du presse-papiers)
+        run: ./target/release/copyq-rs --media-selftest 2>&1 | tee media.log
+
       - name: Tests de bout en bout (vrai presse-papiers macOS)
         run: python3 ci/e2e.py ./target/release/copyq-rs 2>&1 | tee e2e.log
 
@@ -56,6 +59,18 @@ jobs:
       - name: Captures (clair puis sombre)
         run: |
           mkdir -p shots
+          python3 ci/make_png.py /tmp/capture.png 1280 720
+          # Copies faites pendant que l'app tourne : une image puis un fichier.
+          ./target/release/copyq-rs > shots/run-seed.log 2>&1 &
+          PID=$!
+          sleep 5
+          osascript -e 'set the clipboard to (read (POSIX file "/tmp/capture.png") as «class PNGf»)'
+          sleep 2
+          printf 'demo' > "/tmp/Présentation client.mov"
+          osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
+          sleep 2
+          kill $PID || true
+          sleep 2
           for mode in light dark; do
             COPYQ_THEME=$mode ./target/release/copyq-rs > "shots/run-$mode.log" 2>&1 &
             PID=$!
@@ -74,7 +89,7 @@ jobs:
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log media.log /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b ci-results
           git config user.name "github-actions"

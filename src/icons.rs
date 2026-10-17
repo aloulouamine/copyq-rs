@@ -126,3 +126,39 @@ pub fn lock(p: &Painter, c: Pos2, color: Color32) {
     p.add(Shape::line(shackle, s(color)));
     p.circle_filled(pos2(c.x, c.y + 2.5), 1.3, color);
 }
+
+/// Photo (image sans vignette disponible).
+pub fn photo(p: &Painter, c: Pos2, color: Color32) {
+    let frame = Rect::from_center_size(c, vec2(15.0, 12.0));
+    p.rect_stroke(frame, Rounding::same(2.0), s(color));
+    p.circle_filled(pos2(frame.left() + 4.5, frame.top() + 4.0), 1.4, color);
+    p.add(Shape::line(
+        vec![
+            pos2(frame.left() + 1.5, frame.bottom() - 2.0),
+            pos2(frame.left() + 6.0, c.y),
+            pos2(frame.left() + 9.0, c.y + 2.5),
+            pos2(frame.left() + 11.0, c.y + 0.5),
+            pos2(frame.right() - 1.5, frame.bottom() - 2.0),
+        ],
+        s(color),
+    ));
+}
+
+/// Document à coin replié (fichiers copiés dans le Finder).
+pub fn document(p: &Painter, c: Pos2, color: Color32) {
+    let (l, r, t, b) = (c.x - 5.5, c.x + 5.5, c.y - 7.0, c.y + 7.0);
+    let fold = 4.0;
+    p.add(Shape::line(
+        vec![
+            pos2(r - fold, t),
+            pos2(l, t),
+            pos2(l, b),
+            pos2(r, b),
+            pos2(r, t + fold),
+            pos2(r - fold, t),
+            pos2(r - fold, t + fold),
+            pos2(r, t + fold),
+        ],
+        s(color),
+    ));
+}

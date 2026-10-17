@@ -1,15 +1,16 @@
 //! Interface egui : recherche, liste de l'historique, navigation clavier.
 
-use crate::history::{self, History};
+use crate::history::{self, History, ItemKind};
 use crate::logging::LockExt;
 use crate::settings::{self, Settings};
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, icons, login_item, platform, storage, tray};
+use crate::{clipboard, hotkey, icons, login_item, media, platform, storage, tray};
 use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -29,6 +30,9 @@ enum Kind {
     Multiline,
     Text,
     Secret,
+    Image,
+    File,
+    Folder,
 }
 
 impl Kind {
@@ -55,6 +59,9 @@ impl Kind {
             Kind::Email => icons::envelope(painter, center, color),
             Kind::Multiline => icons::lines(painter, center, color),
             Kind::Secret => icons::lock(painter, center, color),
+            Kind::Image => icons::photo(painter, center, color),
+            Kind::File => icons::document(painter, center, color),
+            Kind::Folder => icons::folder(painter, center, color),
             Kind::Text => {
                 painter.text(
                     center,
@@ -77,6 +84,11 @@ struct Row {
     lines: usize,
     chars: usize,
     sensitive: bool,
+    item_kind: ItemKind,
+    /// Image : empreinte (vignette) ; fichiers : chemins pour l'infobulle.
+    thumb: Option<String>,
+    /// Description propre aux images / fichiers.
+    detail: String,
 }
 
 struct Toast {
@@ -88,15 +100,15 @@ struct Toast {
 
 pub struct CopyApp {
     history: Arc<Mutex<History>>,
-    paused: Arc<AtomicBool>,
+    /// Réglages et états partagés avec la surveillance du presse-papiers.
+    shared: clipboard::Shared,
     clipboard: Option<arboard::Clipboard>,
     query: String,
     selected: usize,
     scroll_to_selected: bool,
     settings: Settings,
-    /// Partagés avec la surveillance du presse-papiers.
-    save_passwords: Arc<AtomicBool>,
-    detect_passwords: Arc<AtomicBool>,
+    /// Vignettes chargées (empreinte → texture), `None` si illisible.
+    thumbs: HashMap<String, Option<egui::TextureHandle>>,
     confirm_clear: bool,
     open_settings_on_start: bool,
     login_status: login_item::Status,
@@ -113,16 +125,12 @@ impl CopyApp {
 
         let settings = Settings::load(&settings::default_path());
         log::info!("réglages : {settings:?}");
-        let paused = Arc::new(AtomicBool::new(false));
-        let save_passwords = Arc::new(AtomicBool::new(settings.save_passwords));
-        let detect_passwords = Arc::new(AtomicBool::new(settings.detect_passwords));
-        clipboard::spawn_watcher(
-            history.clone(),
-            paused.clone(),
-            save_passwords.clone(),
-            detect_passwords.clone(),
-            cc.egui_ctx.clone(),
+        let shared = clipboard::Shared::new(
+            settings.save_passwords,
+            settings.detect_passwords,
+            settings.save_images,
         );
+        clipboard::spawn_watcher(history.clone(), shared.clone(), cc.egui_ctx.clone());
 
         let tray = match tray::create(&cc.egui_ctx) {
             Ok(t) => Some(t),
@@ -149,14 +157,13 @@ impl CopyApp {
 
         let mut app = Self {
             history,
-            paused,
+            shared,
             clipboard: arboard::Clipboard::new().ok(),
             query: String::new(),
             selected: 0,
             scroll_to_selected: false,
             settings,
-            save_passwords,
-            detect_passwords,
+            thumbs: HashMap::new(),
             login_status: login_item::status(),
             confirm_clear: false,
             open_settings_on_start: std::env::var_os("COPYQ_OPEN_SETTINGS").is_some(),
@@ -184,7 +191,7 @@ impl CopyApp {
                 .into_iter()
                 .map(|i| {
                     let it = &h.items()[i];
-                    Row {
+                    let mut row = Row {
                         index: i,
                         title: if it.sensitive {
                             "••••••••••••".to_string()
@@ -196,7 +203,51 @@ impl CopyApp {
                         copied_at: it.copied_at,
                         lines: it.text.trim().lines().count().max(1),
                         chars: it.text.chars().count(),
+                        item_kind: it.kind,
+                        thumb: None,
+                        detail: String::new(),
+                    };
+                    match it.kind {
+                        ItemKind::Text => {}
+                        ItemKind::Image => {
+                            row.kind = Kind::Image;
+                            row.title = "Image".into();
+                            row.thumb = Some(it.text.clone());
+                            row.detail = it.meta.clone();
+                        }
+                        ItemKind::Files => {
+                            let paths = it.paths();
+                            let name = |p: &std::path::Path| {
+                                p.file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_else(|| p.display().to_string())
+                            };
+                            row.title = match paths.len() {
+                                0 => "Fichier".into(),
+                                1 => name(&paths[0]),
+                                n => format!("{} + {} autre(s)", name(&paths[0]), n - 1),
+                            };
+                            row.kind = if paths.len() == 1 && paths[0].is_dir() {
+                                Kind::Folder
+                            } else {
+                                Kind::File
+                            };
+                            let parent = paths
+                                .first()
+                                .and_then(|p| p.parent())
+                                .map(|d| shorten_home(d))
+                                .unwrap_or_default();
+                            let missing = !paths.iter().all(|p| p.exists());
+                            row.detail = if missing {
+                                format!("{parent}  ·  introuvable")
+                            } else if paths.len() > 1 {
+                                format!("{} fichiers  ·  {parent}", paths.len())
+                            } else {
+                                parent
+                            };
+                        }
                     }
+                    row
                 })
                 .collect(),
         );
@@ -206,10 +257,10 @@ impl CopyApp {
 
     /// Remet l'élément dans le presse-papiers et le remonte en tête.
     fn copy_item(&mut self, ctx: &egui::Context, index: usize) {
-        let text = {
+        let item = {
             let h = self.history.lock_safe();
             match h.items().get(index) {
-                Some(it) => it.text.clone(),
+                Some(it) => it.clone(),
                 None => return,
             }
         };
@@ -217,11 +268,13 @@ impl CopyApp {
             self.notify_error("Presse-papiers inaccessible");
             return;
         };
-        if let Err(e) = cb.set_text(text.clone()) {
+        if let Err(e) = clipboard::write_item(cb, &item) {
             self.notify_error(format!("Échec de la copie : {e}"));
             return;
         }
-        self.history.lock_safe().push(text);
+        // Cette écriture vient de nous : la surveillance ne doit pas la réenregistrer.
+        self.shared.mark_own_write();
+        self.history.lock_safe().push_item(item);
         self.selected = 0;
         self.scroll_to_selected = true;
         self.notify("Copié dans le presse-papiers");
@@ -255,6 +308,22 @@ impl CopyApp {
         caption(ui, "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.", p);
         ui.add_space(8.0);
 
+        ui.horizontal(|ui| {
+            if toggle(ui, &mut self.settings.save_images, "Enregistrer les images", p).changed() {
+                changed = true;
+                self.shared
+                    .save_images
+                    .store(self.settings.save_images, Ordering::Relaxed);
+            }
+        });
+        caption(
+            ui,
+            "Captures d'écran et images copiées (50 au plus). Les fichiers copiés dans le \
+             Finder (vidéos, sons, PDF…) sont toujours gardés, par leur emplacement.",
+            p,
+        );
+        ui.add_space(8.0);
+
         let available = self.login_status != login_item::Status::Unavailable;
         let mut on = matches!(
             self.login_status,
@@ -284,7 +353,8 @@ impl CopyApp {
                 .changed()
             {
                 changed = true;
-                self.save_passwords
+                self.shared
+                    .save_passwords
                     .store(self.settings.save_passwords, Ordering::Relaxed);
                 log::info!("enregistrement des mots de passe : {}", self.settings.save_passwords);
             }
@@ -302,7 +372,8 @@ impl CopyApp {
                 .changed()
             {
                 changed = true;
-                self.detect_passwords
+                self.shared
+                    .detect_passwords
                     .store(self.settings.detect_passwords, Ordering::Relaxed);
                 log::info!("détection des mots de passe : {}", self.settings.detect_passwords);
             }
@@ -555,12 +626,12 @@ impl eframe::App for CopyApp {
                     .hline(r.x_range(), r.top(), Stroke::new(1.0_f32, p.border));
 
                 ui.horizontal(|ui| {
-                    let mut paused = self.paused.load(Ordering::Relaxed);
+                    let mut paused = self.shared.paused.load(Ordering::Relaxed);
                     if toggle(ui, &mut paused, "Pause", &p)
                         .on_hover_text("Ne plus enregistrer les nouvelles copies (mots de passe…)")
                         .changed()
                     {
-                        self.paused.store(paused, Ordering::Relaxed);
+                        self.shared.paused.store(paused, Ordering::Relaxed);
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -625,6 +696,16 @@ impl eframe::App for CopyApp {
 
                 let now = history::now_secs();
                 let hist = self.history.clone();
+                // Vignettes : chargées une fois, puis gardées en cache.
+                for row in rows.iter() {
+                    if let Some(hash) = &row.thumb {
+                        if !self.thumbs.contains_key(hash) {
+                            let tex = load_thumbnail(ctx, hash);
+                            self.thumbs.insert(hash.clone(), tex);
+                        }
+                    }
+                }
+                let thumbs = &self.thumbs;
                 let scroll_to_selected = self.scroll_to_selected;
                 let selected = self.selected;
                 let mut clicked: Option<(usize, usize)> = None;
@@ -633,9 +714,15 @@ impl eframe::App for CopyApp {
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         for (pos, row) in rows.iter().enumerate() {
+                            let thumb = row
+                                .thumb
+                                .as_ref()
+                                .and_then(|h| thumbs.get(h))
+                                .and_then(|t| t.as_ref());
                             let action = row_ui(
                                 ui,
                                 row,
+                                thumb,
                                 pos == selected,
                                 scroll_to_selected,
                                 now,
@@ -713,9 +800,11 @@ enum RowAction {
 }
 
 /// Dessine une ligne de l'historique façon « carte » : icône, aperçu, métadonnées.
+#[allow(clippy::too_many_arguments)]
 fn row_ui(
     ui: &mut Ui,
     row: &Row,
+    thumb: Option<&egui::TextureHandle>,
     selected: bool,
     scroll_to_selected: bool,
     now: u64,
@@ -723,7 +812,7 @@ fn row_ui(
     p: &Palette,
 ) -> RowAction {
     let (rect, resp) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), row_height(row)), Sense::click());
     if selected && scroll_to_selected {
         resp.scroll_to_me(None);
     }
@@ -754,13 +843,33 @@ fn row_ui(
         egui::pos2(inner.left() + 15.0, rect.center().y),
         egui::vec2(30.0, 30.0),
     );
-    painter.rect_filled(tile, 8.0, if selected { p.surface } else { p.surface_hover });
-    painter.rect_stroke(tile, 8.0, Stroke::new(1.0_f32, p.border));
-    row.kind
-        .paint(&painter, tile.center(), if selected { p.accent } else { p.text_muted });
+    let text_x = if let Some(tex) = thumb {
+        // Vignette, proportions respectées, dans un cadre de 96 × 60.
+        let frame = Rect::from_min_size(
+            egui::pos2(inner.left(), rect.center().y - 30.0),
+            egui::vec2(96.0, 60.0),
+        );
+        let [w, h] = tex.size();
+        let scale = (frame.width() / w as f32).min(frame.height() / h as f32).min(1.0);
+        let img = Rect::from_center_size(frame.center(), egui::vec2(w as f32, h as f32) * scale);
+        painter.rect_filled(frame, 6.0, p.surface_hover);
+        painter.image(
+            tex.id(),
+            img,
+            Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
+        painter.rect_stroke(frame, 6.0, Stroke::new(1.0_f32, p.border));
+        frame.right() + 12.0
+    } else {
+        painter.rect_filled(tile, 8.0, if selected { p.surface } else { p.surface_hover });
+        painter.rect_stroke(tile, 8.0, Stroke::new(1.0_f32, p.border));
+        row.kind
+            .paint(&painter, tile.center(), if selected { p.accent } else { p.text_muted });
+        tile.right() + 12.0
+    };
 
     // Texte.
-    let text_x = tile.right() + 12.0;
     let max_w = (inner.right() - 72.0 - text_x).max(40.0);
     let title = single_line(ui, &row.title, 14.0, p.text, max_w);
     let meta = single_line(ui, &meta_text(row, now), 11.5, p.text_faint, max_w);
@@ -797,24 +906,26 @@ fn row_ui(
         }
 
         let lock_rect = action_rect.translate(egui::vec2(-30.0, 0.0));
-        let lock = ui
+        let lock = (row.item_kind == ItemKind::Text).then(|| ui
             .interact(lock_rect, resp.id.with("lock"), Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text(if row.sensitive {
                 "Ce n'est pas un mot de passe : afficher en clair (⌘L)"
             } else {
                 "C'est un mot de passe : chiffrer et masquer (⌘L)"
-            });
-        if lock.hovered() {
-            painter.rect_filled(lock_rect, 7.0, p.accent.gamma_multiply(0.15));
-        }
-        icons::lock(
-            &painter,
-            lock_rect.center(),
-            if lock.hovered() || row.sensitive { p.accent } else { p.text_faint },
-        );
-        if lock.clicked() {
-            action = RowAction::ToggleSensitive;
+            }));
+        if let Some(lock) = lock {
+            if lock.hovered() {
+                painter.rect_filled(lock_rect, 7.0, p.accent.gamma_multiply(0.15));
+            }
+            icons::lock(
+                &painter,
+                lock_rect.center(),
+                if lock.hovered() || row.sensitive { p.accent } else { p.text_faint },
+            );
+            if lock.clicked() {
+                action = RowAction::ToggleSensitive;
+            }
         }
     } else if selected {
         icons::enter(&painter, action_rect.center(), p.accent);
@@ -825,6 +936,13 @@ fn row_ui(
     }
     resp.on_hover_ui(|ui| {
         ui.set_max_width(440.0);
+        if let Some(tex) = thumb {
+            let [w, h] = tex.size();
+            let scale = (420.0 / w as f32).min(320.0 / h as f32).min(1.0);
+            ui.add(egui::Image::new((tex.id(), egui::vec2(w as f32, h as f32) * scale)));
+            ui.label(RichText::new(&row.detail).size(11.5));
+            return;
+        }
         let text = if row.sensitive {
             "Mot de passe masqué — cliquez ou ↵ pour le copier".to_string()
         } else {
@@ -835,7 +953,49 @@ fn row_ui(
     action
 }
 
+fn row_height(row: &Row) -> f32 {
+    if row.thumb.is_some() {
+        ROW_HEIGHT + 20.0
+    } else {
+        ROW_HEIGHT
+    }
+}
+
+/// Charge la vignette d'une image enregistrée en texture egui.
+fn load_thumbnail(ctx: &egui::Context, hash: &str) -> Option<egui::TextureHandle> {
+    let path = media::thumb_path(&media::images_dir(), hash);
+    match media::load_rgba(&path) {
+        Ok((w, h, rgba)) => {
+            let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+            Some(ctx.load_texture(format!("thumb-{hash}"), img, egui::TextureOptions::LINEAR))
+        }
+        Err(e) => {
+            log::warn!("vignette illisible : {e}");
+            None
+        }
+    }
+}
+
+/// Remplace le dossier personnel par « ~ ».
+fn shorten_home(dir: &std::path::Path) -> String {
+    let s = dir.display().to_string();
+    match directories::BaseDirs::new() {
+        Some(b) => {
+            let home = b.home_dir().display().to_string();
+            match s.strip_prefix(&home) {
+                Some(rest) => format!("~{rest}"),
+                None => s,
+            }
+        }
+        None => s,
+    }
+}
+
 fn meta_text(row: &Row, now: u64) -> String {
+    if row.item_kind != ItemKind::Text {
+        let when = history::relative_time(row.copied_at, now);
+        return if row.detail.is_empty() { when } else { format!("{when}  ·  {}", row.detail) };
+    }
     if row.sensitive {
         return format!("mot de passe  ·  {}", history::relative_time(row.copied_at, now));
     }

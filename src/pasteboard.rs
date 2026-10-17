@@ -13,6 +13,46 @@ const IGNORED_TYPES: &[&str] = &[
     "Pasteboard generator type",
 ];
 
+/// Nature du contenu copié, déduite des types déclarés.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Payload {
+    /// Fichiers ou dossiers copiés dans le Finder (vidéos, sons, PDF…).
+    Files,
+    /// Texte (prioritaire sur l'image : un traitement de texte joint souvent un aperçu).
+    Text,
+    /// Image seule (capture d'écran, « Copier l'image »…).
+    Image,
+}
+
+const FILE_TYPES: &[&str] = &["public.file-url", "NSFilenamesPboardType"];
+const TEXT_TYPES: &[&str] = &[
+    "public.utf8-plain-text",
+    "public.utf16-external-plain-text",
+    "NSStringPboardType",
+];
+const IMAGE_TYPES: &[&str] = &[
+    "public.png",
+    "public.tiff",
+    "public.jpeg",
+    "public.heic",
+    "com.compuserve.gif",
+    "Apple PNG pasteboard type",
+    "NeXT TIFF v4.0 pasteboard type",
+];
+
+pub fn classify_payload(types: &[String]) -> Payload {
+    let has = |set: &[&str]| types.iter().any(|t| set.contains(&t.as_str()));
+    if has(FILE_TYPES) {
+        Payload::Files
+    } else if has(TEXT_TYPES) {
+        Payload::Text
+    } else if has(IMAGE_TYPES) {
+        Payload::Image
+    } else {
+        Payload::Text
+    }
+}
+
 /// Vrai si le contenu ne doit pas être enregistré (mot de passe, contenu temporaire…).
 pub fn should_ignore(types: &[String]) -> bool {
     types
@@ -54,10 +94,85 @@ mod imp {
     use objc2::rc::autoreleasepool;
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
-    use std::ffi::{c_char, CStr};
+    use std::ffi::{c_char, CStr, CString};
+    use std::path::PathBuf;
 
     fn general() -> *mut AnyObject {
         unsafe { msg_send![class!(NSPasteboard), generalPasteboard] }
+    }
+
+    unsafe fn ns_string(s: &str) -> Option<*mut AnyObject> {
+        let c = CString::new(s).ok()?;
+        let ns: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c.as_ptr()];
+        (!ns.is_null()).then_some(ns)
+    }
+
+    unsafe fn rust_string(ns: *mut AnyObject) -> Option<String> {
+        if ns.is_null() {
+            return None;
+        }
+        let c: *const c_char = msg_send![ns, UTF8String];
+        (!c.is_null()).then(|| CStr::from_ptr(c).to_string_lossy().into_owned())
+    }
+
+    /// Chemins des fichiers copiés (le Finder fournit souvent des URL de type
+    /// « file:///.file/id=… », résolues ici en vrais chemins).
+    pub fn file_paths() -> Vec<PathBuf> {
+        autoreleasepool(|_| unsafe {
+            let pb = general();
+            if pb.is_null() {
+                return Vec::new();
+            }
+            let items: *mut AnyObject = msg_send![pb, pasteboardItems];
+            let Some(file_url) = ns_string("public.file-url") else { return Vec::new() };
+            if items.is_null() {
+                return Vec::new();
+            }
+            let n: usize = msg_send![items, count];
+            (0..n)
+                .filter_map(|i| {
+                    let item: *mut AnyObject = msg_send![items, objectAtIndex: i];
+                    let s: *mut AnyObject = msg_send![item, stringForType: file_url];
+                    if s.is_null() {
+                        return None;
+                    }
+                    let url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: s];
+                    if url.is_null() {
+                        return None;
+                    }
+                    let resolved: *mut AnyObject = msg_send![url, filePathURL];
+                    if resolved.is_null() {
+                        return None;
+                    }
+                    let path: *mut AnyObject = msg_send![resolved, path];
+                    rust_string(path).map(PathBuf::from)
+                })
+                .collect()
+        })
+    }
+
+    /// Remet des fichiers dans le presse-papiers (collables dans le Finder, un mail…).
+    pub fn write_file_paths(paths: &[PathBuf]) -> bool {
+        autoreleasepool(|_| unsafe {
+            let pb = general();
+            if pb.is_null() {
+                return false;
+            }
+            let array: *mut AnyObject = msg_send![class!(NSMutableArray), array];
+            for p in paths {
+                let Some(s) = p.to_str().and_then(|s| ns_string(s)) else { continue };
+                let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: s];
+                if !url.is_null() {
+                    let _: () = msg_send![array, addObject: url];
+                }
+            }
+            let count: usize = msg_send![array, count];
+            if count == 0 {
+                return false;
+            }
+            let _: isize = msg_send![pb, clearContents];
+            msg_send![pb, writeObjects: array]
+        })
     }
 
     /// Compteur incrémenté par macOS à chaque nouvelle copie, quelle que soit l'app.
@@ -100,15 +215,22 @@ mod imp {
 
 #[cfg(not(target_os = "macos"))]
 mod imp {
+    use std::path::PathBuf;
     pub fn change_count() -> Option<isize> {
         None
     }
     pub fn types() -> Vec<String> {
         Vec::new()
     }
+    pub fn file_paths() -> Vec<PathBuf> {
+        Vec::new()
+    }
+    pub fn write_file_paths(_: &[PathBuf]) -> bool {
+        false
+    }
 }
 
-pub use imp::{change_count, types};
+pub use imp::{change_count, file_paths, types, write_file_paths};
 
 #[cfg(test)]
 mod tests {
@@ -160,6 +282,21 @@ mod tests {
         ] {
             assert!(!looks_like_password(text), "faux positif : {text}");
         }
+    }
+
+    #[test]
+    fn classifies_payloads() {
+        // Capture d'écran (journal réel).
+        let shot = v(&["public.png", "Apple PNG pasteboard type", "public.tiff", "NeXT TIFF v4.0 pasteboard type"]);
+        assert_eq!(classify_payload(&shot), Payload::Image);
+        // Fichier copié dans le Finder : URL + nom + icône.
+        let finder = v(&["public.file-url", "public.utf8-plain-text", "public.tiff"]);
+        assert_eq!(classify_payload(&finder), Payload::Files);
+        // Texte riche avec aperçu image (Pages, Word…) : reste du texte.
+        let rich = v(&["public.rtf", "public.utf8-plain-text", "public.tiff"]);
+        assert_eq!(classify_payload(&rich), Payload::Text);
+        assert_eq!(classify_payload(&v(&["public.utf8-plain-text"])), Payload::Text);
+        assert_eq!(classify_payload(&[]), Payload::Text);
     }
 
     #[test]

@@ -5,11 +5,12 @@
 //! ne lit le contenu que lorsqu'il a bougé. Les copies marquées confidentielles
 //! par les gestionnaires de mots de passe sont ignorées sans être lues.
 
-use crate::history::History;
+use crate::history::{History, Item, ItemKind};
+use crate::media;
 use crate::logging::LockExt;
-use crate::pasteboard;
+use crate::pasteboard::{self, Payload};
 use eframe::egui;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -61,13 +62,39 @@ fn classify(
     Change::Read { sensitive }
 }
 
-pub fn spawn_watcher(
-    history: Arc<Mutex<History>>,
-    paused: Arc<AtomicBool>,
-    save_passwords: Arc<AtomicBool>,
-    detect_passwords: Arc<AtomicBool>,
-    ctx: egui::Context,
-) {
+/// Réglages et états partagés entre l'interface et la surveillance.
+#[derive(Clone)]
+pub struct Shared {
+    pub paused: Arc<AtomicBool>,
+    pub save_passwords: Arc<AtomicBool>,
+    pub detect_passwords: Arc<AtomicBool>,
+    pub save_images: Arc<AtomicBool>,
+    /// Compteur du presse-papiers après une écriture de l'app elle-même (recopie
+    /// d'un élément) : cette « copie » ne doit pas être réenregistrée.
+    pub own_change: Arc<AtomicIsize>,
+}
+
+impl Shared {
+    pub fn new(save_passwords: bool, detect_passwords: bool, save_images: bool) -> Self {
+        Self {
+            paused: Arc::new(AtomicBool::new(false)),
+            save_passwords: Arc::new(AtomicBool::new(save_passwords)),
+            detect_passwords: Arc::new(AtomicBool::new(detect_passwords)),
+            save_images: Arc::new(AtomicBool::new(save_images)),
+            own_change: Arc::new(AtomicIsize::new(isize::MIN)),
+        }
+    }
+
+    /// À appeler juste après que l'app a écrit dans le presse-papiers.
+    pub fn mark_own_write(&self) {
+        if let Some(c) = pasteboard::change_count() {
+            self.own_change.store(c, Ordering::Relaxed);
+        }
+    }
+}
+
+pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Context) {
+    let images_dir = media::images_dir();
     let spawned = thread::Builder::new()
         .name("clipboard-watcher".into())
         .spawn(move || {
@@ -86,15 +113,23 @@ pub fn spawn_watcher(
             loop {
                 thread::sleep(POLL_INTERVAL);
                 let count = pasteboard::change_count();
+                if let Some(c) = count {
+                    if c == shared.own_change.load(Ordering::Relaxed) && last_count != Some(c) {
+                        last_count = Some(c); // recopie faite par l'app elle-même
+                        continue;
+                    }
+                }
+                let mut seen_types = Vec::new();
                 let change = classify(
                     &mut last_count,
                     count,
-                    paused.load(Ordering::Relaxed),
-                    save_passwords.load(Ordering::Relaxed),
+                    shared.paused.load(Ordering::Relaxed),
+                    shared.save_passwords.load(Ordering::Relaxed),
                     || {
                         let types = pasteboard::types();
                         // Seulement les identifiants de types, jamais le contenu.
                         log::info!("nouvelle copie, types : {types:?}");
+                        seen_types = types.clone();
                         types
                     },
                 );
@@ -106,31 +141,75 @@ pub fn spawn_watcher(
                     }
                     Change::Read { sensitive } => sensitive,
                 };
-                // Erreur = contenu non textuel (image, fichier…) : ignoré.
-                let Ok(text) = clipboard.get_text() else { continue };
-                if count.is_none() {
-                    if last_text.as_deref() == Some(text.as_str()) {
-                        continue;
+
+                let item = match pasteboard::classify_payload(&seen_types) {
+                    Payload::Files if !sensitive => {
+                        let paths = pasteboard::file_paths();
+                        if paths.is_empty() {
+                            continue;
+                        }
+                        log::info!("{} fichier(s) copié(s)", paths.len());
+                        Item {
+                            text: paths
+                                .iter()
+                                .map(|p| p.to_string_lossy())
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                            kind: ItemKind::Files,
+                            ..Default::default()
+                        }
                     }
-                    last_text = Some(text.clone());
-                }
-                // Mot de passe copié sans marqueur (extension de navigateur…) ?
-                let probable = !sensitive
-                    && detect_passwords.load(Ordering::Relaxed)
-                    && pasteboard::looks_like_password(&text);
-                if probable && !save_passwords.load(Ordering::Relaxed) {
-                    log::info!("Copie ignorée (mot de passe probable)");
-                    continue;
-                }
-                let sensitive = sensitive || probable;
-                if sensitive {
-                    log::info!(
-                        "Mot de passe enregistré ({}), chiffré et affiché masqué",
-                        if probable { "détecté" } else { "marqué confidentiel" }
-                    );
-                }
-                let changed = history.lock_safe().push_with(text, sensitive);
-                if changed {
+                    Payload::Image if !sensitive => {
+                        if !shared.save_images.load(Ordering::Relaxed) {
+                            log::info!("Copie ignorée (image, réglage désactivé)");
+                            continue;
+                        }
+                        let Ok(img) = clipboard.get_image() else { continue };
+                        let (w, h) = (img.width as u32, img.height as u32);
+                        match media::save_rgba(&images_dir, w, h, img.bytes.into_owned()) {
+                            Ok(saved) => {
+                                log::info!("image copiée : {}", saved.meta);
+                                Item {
+                                    text: saved.hash,
+                                    kind: ItemKind::Image,
+                                    meta: saved.meta,
+                                    ..Default::default()
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("image non enregistrée : {e}");
+                                continue;
+                            }
+                        }
+                    }
+                    _ => {
+                        // Erreur = contenu non textuel inconnu : ignoré.
+                        let Ok(text) = clipboard.get_text() else { continue };
+                        if count.is_none() {
+                            if last_text.as_deref() == Some(text.as_str()) {
+                                continue;
+                            }
+                            last_text = Some(text.clone());
+                        }
+                        // Mot de passe copié sans marqueur (extension de navigateur…) ?
+                        let probable = !sensitive
+                            && shared.detect_passwords.load(Ordering::Relaxed)
+                            && pasteboard::looks_like_password(&text);
+                        if probable && !shared.save_passwords.load(Ordering::Relaxed) {
+                            log::info!("Copie ignorée (mot de passe probable)");
+                            continue;
+                        }
+                        let sensitive = sensitive || probable;
+                        if sensitive {
+                            log::info!(
+                                "Mot de passe enregistré ({}), chiffré et affiché masqué",
+                                if probable { "détecté" } else { "marqué confidentiel" }
+                            );
+                        }
+                        Item::text(text, 0, sensitive)
+                    }
+                };
+                if history.lock_safe().push_item(item) {
                     ctx.request_repaint();
                 }
             }
@@ -138,6 +217,79 @@ pub fn spawn_watcher(
     if let Err(e) = spawned {
         log::error!("Impossible de lancer la surveillance du presse-papiers : {e}");
     }
+}
+
+/// Remet un élément dans le presse-papiers (texte, image ou fichiers).
+pub fn write_item(clipboard: &mut arboard::Clipboard, item: &Item) -> Result<(), String> {
+    match item.kind {
+        ItemKind::Text => clipboard.set_text(item.text.clone()).map_err(|e| e.to_string()),
+        ItemKind::Image => {
+            let path = media::full_path(&media::images_dir(), &item.text);
+            let (w, h, rgba) = media::load_rgba(&path).map_err(|_| "image introuvable".to_string())?;
+            clipboard
+                .set_image(arboard::ImageData {
+                    width: w as usize,
+                    height: h as usize,
+                    bytes: rgba.into(),
+                })
+                .map_err(|e| e.to_string())
+        }
+        ItemKind::Files => {
+            let existing: Vec<_> = item.paths().into_iter().filter(|p| p.exists()).collect();
+            if existing.is_empty() {
+                return Err("fichier(s) introuvable(s) — déplacé(s) ou supprimé(s) ?".into());
+            }
+            if pasteboard::write_file_paths(&existing) {
+                Ok(())
+            } else {
+                Err("écriture des fichiers dans le presse-papiers impossible".into())
+            }
+        }
+    }
+}
+
+/// Auto-test CI : `copyq-rs --media-selftest` (écrit puis relit image et fichiers).
+pub fn media_selftest() -> i32 {
+    let mut ok = true;
+    let mut cb = match arboard::Clipboard::new() {
+        Ok(c) => c,
+        Err(e) => {
+            println!("ÉCHEC presse-papiers : {e}");
+            return 1;
+        }
+    };
+    let dir = std::env::temp_dir().join(format!("copyq-rs-media-selftest-{}", std::process::id()));
+    let px: Vec<u8> = (0..64 * 32).flat_map(|i| [(i % 256) as u8, 80, 160, 255]).collect();
+    let saved = media::save_rgba(&dir, 64, 32, px).expect("image de test");
+
+    // Recopie d'image : on lit directement le fichier enregistré.
+    let img = Item { text: saved.hash.clone(), kind: ItemKind::Image, ..Default::default() };
+    let path = media::full_path(&dir, &saved.hash);
+    let (w, h, rgba) = media::load_rgba(&path).unwrap();
+    let wrote = cb
+        .set_image(arboard::ImageData { width: w as usize, height: h as usize, bytes: rgba.into() })
+        .is_ok();
+    let types = pasteboard::types();
+    let payload = pasteboard::classify_payload(&types);
+    let back = cb.get_image().map(|i| (i.width, i.height)).ok();
+    println!("image : écrite={wrote} types={types:?} → {payload:?}, relue {back:?}");
+    ok &= wrote && payload == Payload::Image && back == Some((64, 32));
+    let _ = img;
+
+    // Recopie de fichiers.
+    let files = vec![path.clone(), media::thumb_path(&dir, &saved.hash)];
+    let wrote = pasteboard::write_file_paths(&files);
+    let types = pasteboard::types();
+    let back = pasteboard::file_paths();
+    println!("fichiers : écrits={wrote} → {:?}, relus {back:?}", pasteboard::classify_payload(&types));
+    let canon = |v: &[std::path::PathBuf]| -> Vec<_> {
+        v.iter().filter_map(|p| p.canonicalize().ok()).collect()
+    };
+    ok &= wrote && pasteboard::classify_payload(&types) == Payload::Files && canon(&back) == canon(&files);
+
+    let _ = std::fs::remove_dir_all(dir);
+    println!("{}", if ok { "SUCCÈS" } else { "ÉCHEC" });
+    i32::from(!ok)
 }
 
 #[cfg(test)]
