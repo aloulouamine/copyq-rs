@@ -13,7 +13,7 @@ pub fn register(ctx: &egui::Context) -> Result<GlobalHotKeyManager, Box<dyn Erro
     // On cherche la touche qui produit « z » avec la disposition active
     // (sur AZERTY, ce n'est pas la même position qu'en QWERTY).
     let key = keyboard::code_for_char('z').unwrap_or(Code::KeyZ);
-    eprintln!("Raccourci global : ⌘⇧Z (touche physique {key:?})");
+    log::info!("Raccourci global : ⌘⇧Z (touche physique {key:?})");
     // SUPER = touche ⌘ sur macOS.
     let hotkey = HotKey::new(Some(Modifiers::SUPER | Modifiers::SHIFT), key);
     manager.register(hotkey)?;

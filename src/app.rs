@@ -1,6 +1,7 @@
 //! Interface egui : recherche, liste de l'historique, navigation clavier.
 
 use crate::history::{self, History};
+use crate::logging::LockExt;
 use crate::theme::{self, Palette};
 use crate::{clipboard, hotkey, icons, platform, tray};
 use eframe::egui::{
@@ -106,7 +107,7 @@ impl CopyApp {
         let tray = match tray::create(&cc.egui_ctx) {
             Ok(t) => Some(t),
             Err(e) => {
-                eprintln!("Icône de barre des menus indisponible : {e}");
+                log::warn!("Icône de barre des menus indisponible : {e}");
                 None
             }
         };
@@ -115,7 +116,7 @@ impl CopyApp {
         let hotkey = match hotkey::register(&cc.egui_ctx) {
             Ok(m) => Some(m),
             Err(e) => {
-                eprintln!("Raccourci ⌘⇧Z indisponible : {e}");
+                log::warn!("Raccourci ⌘⇧Z indisponible : {e}");
                 toast = Some(Toast {
                     message: "⌘⇧Z déjà utilisé — CopyQ est-il encore lancé ?".into(),
                     at: Instant::now(),
@@ -143,7 +144,7 @@ impl CopyApp {
     }
 
     fn rows(&mut self) -> Arc<Vec<Row>> {
-        let h = self.history.lock().unwrap();
+        let h = self.history.lock_safe();
         if let Some((version, query, rows)) = &self.cache {
             if *version == h.version() && *query == self.query {
                 return rows.clone();
@@ -172,7 +173,7 @@ impl CopyApp {
     /// Remet l'élément dans le presse-papiers et le remonte en tête.
     fn copy_item(&mut self, ctx: &egui::Context, index: usize) {
         let text = {
-            let h = self.history.lock().unwrap();
+            let h = self.history.lock_safe();
             match h.items().get(index) {
                 Some(it) => it.text.clone(),
                 None => return,
@@ -187,7 +188,7 @@ impl CopyApp {
             return;
         }
         {
-            let mut h = self.history.lock().unwrap();
+            let mut h = self.history.lock_safe();
             if h.push(text) {
                 let _ = h.save();
             }
@@ -202,14 +203,14 @@ impl CopyApp {
     }
 
     fn delete_item(&mut self, index: usize) {
-        let mut h = self.history.lock().unwrap();
+        let mut h = self.history.lock_safe();
         if h.remove(index).is_some() {
             let _ = h.save();
         }
     }
 
     fn clear_all(&mut self) {
-        let mut h = self.history.lock().unwrap();
+        let mut h = self.history.lock_safe();
         h.clear();
         let _ = h.save();
         self.selected = 0;
@@ -244,7 +245,7 @@ impl eframe::App for CopyApp {
 
         let p = theme::palette_ctx(ctx);
         let rows = self.rows();
-        let total = self.history.lock().unwrap().len();
+        let total = self.history.lock_safe().len();
         if self.selected >= rows.len() {
             self.selected = rows.len().saturating_sub(1);
         }
@@ -635,7 +636,7 @@ fn single_line(
 
 /// Texte complet (tronqué) affiché au survol d'un élément.
 fn tooltip(history: &Mutex<History>, index: usize) -> String {
-    let h = history.lock().unwrap();
+    let h = history.lock_safe();
     h.items()
         .get(index)
         .map(|it| {

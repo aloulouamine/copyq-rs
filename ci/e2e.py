@@ -61,6 +61,9 @@ try:
     texts = stored_texts()
     check("la copie suivante est bien enregistrée", again in texts)
     check("la plus récente est en tête", bool(texts) and texts[0] == again)
+    logfile = os.path.expanduser("~/Library/Logs/copyq-rs/copyq-rs.log")
+    content = open(logfile).read() if os.path.exists(logfile) else ""
+    check("le journal fichier est écrit", "démarré" in content and "Copie ignorée" in content)
 finally:
     app.terminate()
     app.wait(timeout=10)

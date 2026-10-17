@@ -6,6 +6,7 @@
 //! par les gestionnaires de mots de passe sont ignorées sans être lues.
 
 use crate::history::History;
+use crate::logging::LockExt;
 use crate::pasteboard;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,13 +50,13 @@ fn classify(
 }
 
 pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx: egui::Context) {
-    thread::Builder::new()
+    let spawned = thread::Builder::new()
         .name("clipboard-watcher".into())
         .spawn(move || {
             let mut clipboard = match arboard::Clipboard::new() {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("Impossible d'accéder au presse-papiers : {e}");
+                    log::error!("Impossible d'accéder au presse-papiers : {e}");
                     return;
                 }
             };
@@ -75,7 +76,7 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
                 ) {
                     Change::None => continue,
                     Change::Skip(reason) => {
-                        eprintln!("Copie ignorée ({reason})");
+                        log::info!("Copie ignorée ({reason})");
                         continue;
                     }
                     Change::Read => {}
@@ -89,11 +90,11 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
                     last_text = Some(text.clone());
                 }
                 let changed = {
-                    let mut h = history.lock().unwrap();
+                    let mut h = history.lock_safe();
                     let changed = h.push(text);
                     if changed {
                         if let Err(e) = h.save() {
-                            eprintln!("Échec de la sauvegarde : {e}");
+                            log::error!("Échec de la sauvegarde : {e}");
                         }
                     }
                     changed
@@ -102,8 +103,10 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, paused: Arc<AtomicBool>, ctx:
                     ctx.request_repaint();
                 }
             }
-        })
-        .expect("impossible de lancer le thread de surveillance");
+        });
+    if let Err(e) = spawned {
+        log::error!("Impossible de lancer la surveillance du presse-papiers : {e}");
+    }
 }
 
 #[cfg(test)]

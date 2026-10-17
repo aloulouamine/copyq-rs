@@ -6,6 +6,7 @@ mod history;
 mod hotkey;
 mod icons;
 mod keyboard;
+mod logging;
 mod pasteboard;
 mod platform;
 mod theme;
@@ -15,6 +16,7 @@ use eframe::egui;
 use std::sync::{Arc, Mutex};
 
 fn main() -> eframe::Result<()> {
+    logging::init();
     let history = Arc::new(Mutex::new(history::History::load(history::default_path())));
 
     let options = eframe::NativeOptions {
