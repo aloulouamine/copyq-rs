@@ -407,7 +407,9 @@ fn meta_text(row: &Row, now: u64) -> String {
     parts.push(if row.chars < 1000 {
         format!("{} car.", row.chars)
     } else {
-        format!("{:.1} k car.", row.chars as f32 / 1000.0).replace('.', ",")
+        // Virgule décimale sur le nombre seul (pas sur « car. »).
+        let k = format!("{:.1}", row.chars as f32 / 1000.0).replace('.', ",");
+        format!("{k} k car.")
     });
     parts.join("  ·  ")
 }
@@ -459,7 +461,7 @@ mod tests {
             "il y a 2 min  ·  3 lignes  ·  14 car."
         );
         let long = text_row(&"x".repeat(2_500));
-        assert!(meta_text(&long, 0).ends_with("2,5 k car."));
+        assert_eq!(meta_text(&long, 0), "à l'instant  ·  2,5 k car.");
         let mut secret = build_row(0, &Item::text("secret", now, true));
         secret.copied_at = now;
         assert_eq!(meta_text(&secret, now), "mot de passe  ·  à l'instant");
