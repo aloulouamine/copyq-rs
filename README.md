@@ -9,7 +9,7 @@ Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](http
 - **Images** (captures d'écran, « Copier l'image »…) : vignette dans la liste, aperçu au survol, recopie en un clic ; PNG sans perte dans `…/com.amine.copyq-rs/images/`, 50 images au plus (réglage **Enregistrer les images**)
 - **Fichiers copiés dans le Finder** (vidéos, sons, PDF, dossiers…) : gardés par leur emplacement, recopiables pour les coller ailleurs ; signalés « introuvable » s'ils ont été déplacés
 - Recherche instantanée (tous les mots, insensible à la casse)
-- Clic ou **Entrée** : remet l'élément dans le presse-papiers et masque la fenêtre → il suffit de faire ⌘V
+- Clic ou **Entrée** : **collé directement** dans l'application d'où l'historique a été ouvert (⌘⇧Z) — nécessite l'autorisation *Accessibilité* (Réglages Système → Confidentialité et sécurité → Accessibilité) ; sans elle, ou si le réglage **Coller automatiquement** est désactivé, l'élément est copié et il reste à faire ⌘V
 - Navigation **↑ / ↓**, **⌘⌫** supprime l'élément sélectionné, **Échap** vide la recherche puis masque
 - **⌘⇧Z** (raccourci global) affiche l'historique, ou le masque s'il est déjà au premier plan
 - Icône dans la barre des menus (Afficher l'historique / Quitter) ; fermer la fenêtre la masque seulement
@@ -61,6 +61,7 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/login_item.rs` | Ouverture au démarrage (`SMAppService`) |
 | `src/settings.rs` | Réglages persistants (`settings.json`) |
 | `src/media.rs` | Images : PNG, vignettes, empreintes |
+| `src/paste.rs` | Collage automatique (app d'origine, ⌘V simulé) |
 | `src/crypto.rs` | Chiffrement AES-256-GCM et empreintes HMAC |
 | `src/keychain.rs` | Clé de chiffrement dans le trousseau macOS |
 | `src/app.rs` | Interface egui et raccourcis clavier |
