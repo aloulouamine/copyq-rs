@@ -166,7 +166,8 @@ try:
     time.sleep(2)
     files = [r for r in stored_kinds() if r[0] == "files"]
     check("un fichier copié dans le Finder est enregistré",
-          len(files) == 1 and os.path.realpath(files[0][1]) == os.path.realpath(media_file))
+          len(files) == 1 and os.path.exists(files[0][1])
+          and os.path.samefile(files[0][1], media_file))
 
     again = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(again)

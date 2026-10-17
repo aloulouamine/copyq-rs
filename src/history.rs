@@ -110,12 +110,14 @@ impl History {
     }
 
     /// Ajoute un texte ordinaire en tête (voir `push_with`).
+    #[cfg(test)]
     pub fn push(&mut self, text: String) -> bool {
         self.push_with(text, false)
     }
 
     /// Ajoute un texte en tête. Un doublon est remonté en tête au lieu d'être dupliqué
     /// (et reste masqué s'il l'était). Renvoie `true` si l'historique a changé.
+    #[cfg(test)]
     pub fn push_with(&mut self, text: String, sensitive: bool) -> bool {
         self.push_item(Item::text(text, now_secs(), sensitive))
     }
