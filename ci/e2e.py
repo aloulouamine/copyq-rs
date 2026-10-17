@@ -24,6 +24,15 @@ def stored_rows():
         shutil.rmtree(snap, ignore_errors=True)
 
 
+def db_bytes():
+    out = b""
+    for suffix in ("", "-wal", "-shm"):
+        p = os.path.join(DATA, "history.db" + suffix)
+        if os.path.exists(p):
+            out += open(p, "rb").read()
+    return out
+
+
 def stored_texts():
     """Lit la base Turso avec le module sqlite3 de Python (vérifie la compatibilité
     du format). Turso verrouille le fichier pendant que l'app tourne : on lit une copie
@@ -78,8 +87,11 @@ try:
 
     texts = stored_texts()
     check("l'ancien history.json est importé dans la base (11 éléments)", len(texts) == 11)
-    check("le mot de passe importé reste marqué masqué",
-          ("hunter2-MotDePasse!", True) in stored_rows())
+    rows = stored_rows()
+    check("le mot de passe importé est chiffré en base",
+          any(sens and t.startswith("enc:v1:") for t, sens in rows))
+    check("…et n'apparaît nulle part en clair dans les fichiers de la base",
+          b"hunter2-MotDePasse!" not in db_bytes())
     check("l'ordre est conservé à l'import", bool(texts) and texts[0] == "https://github.com/emilk/egui")
     check("le JSON est renommé après import", os.path.exists(os.path.join(DATA, "history.json.migrated")))
 
@@ -138,9 +150,21 @@ try:
     copy_concealed(allowed)
     time.sleep(2)
     rows = stored_rows()
-    check("réglage activé : le mot de passe est enregistré", any(t == allowed for t, _ in rows))
-    check("réglage activé : il est marqué masqué", (allowed, True) in rows)
-    check("réglage relu au démarrage", "save_passwords: true" in open("e2e-app3.log").read())
+    encrypted = [t for t, sens in rows if sens and t.startswith("enc:v1:")]
+    check("réglage activé : le mot de passe est enregistré chiffré", len(encrypted) >= 2)
+    check("réglage activé : jamais écrit en clair", allowed.encode() not in db_bytes())
+    log3 = open("e2e-app3.log").read()
+    check("réglage relu au démarrage", "save_passwords: true" in log3)
+    check("pas d'erreur de trousseau", "chiffrement indisponible" not in log3)
+
+# Relance : le mot de passe chiffré est relu et déchiffré (clé du trousseau).
+app = subprocess.Popen([BIN], stdout=open("e2e-app4.log", "w"), stderr=subprocess.STDOUT)
+time.sleep(4)
+app.terminate()
+app.wait(timeout=10)
+log4 = open("e2e-app4.log").read()
+check("au redémarrage, les mots de passe chiffrés sont déchiffrés",
+      "non déchiffrable" not in log4 and "chiffrement indisponible" not in log4)
 finally:
     app.terminate()
     app.wait(timeout=10)

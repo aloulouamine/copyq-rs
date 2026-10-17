@@ -2,10 +2,12 @@
 
 mod app;
 mod clipboard;
+mod crypto;
 mod history;
 mod hotkey;
 mod icons;
 mod keyboard;
+mod keychain;
 mod logging;
 mod login_item;
 mod pasteboard;
@@ -23,6 +25,9 @@ fn main() -> eframe::Result<()> {
     if std::env::args().any(|a| a == "--login-item-selftest") {
         std::process::exit(login_item::selftest());
     }
+    if std::env::args().any(|a| a == "--keychain-selftest") {
+        std::process::exit(keychain::selftest());
+    }
     logging::init();
     log::info!("lancement au démarrage : {:?}", login_item::status());
 
@@ -34,6 +39,8 @@ fn main() -> eframe::Result<()> {
     let history = match storage::Store::open(
         storage::default_db_path(),
         Some(history::legacy_json_path()),
+        // La clé n'est demandée au trousseau qu'au premier mot de passe à (dé)chiffrer.
+        Box::new(keychain::load_or_create_key),
     ) {
         Ok((store, items)) => history::History::with_store(store, items),
         Err(e) => {

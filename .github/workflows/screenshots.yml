@@ -41,6 +41,9 @@ jobs:
       - name: Build
         run: cargo build --release 2>&1 | tee build.log
 
+      - name: Trousseau macOS (clé de chiffrement)
+        run: python3 -c "import subprocess,sys; sys.exit(subprocess.run(['./target/release/copyq-rs','--keychain-selftest'],timeout=60).returncode)" 2>&1 | tee keychain.log
+
       - name: Tests de bout en bout (vrai presse-papiers macOS)
         run: python3 ci/e2e.py ./target/release/copyq-rs 2>&1 | tee e2e.log
 
@@ -71,7 +74,7 @@ jobs:
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b ci-results
           git config user.name "github-actions"

@@ -4,7 +4,7 @@ use crate::history::{self, History};
 use crate::logging::LockExt;
 use crate::settings::{self, Settings};
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, icons, login_item, platform, tray};
+use crate::{clipboard, hotkey, icons, login_item, platform, storage, tray};
 use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
@@ -283,9 +283,23 @@ impl CopyApp {
         caption(
             ui,
             "Copies marquées confidentielles par 1Password, Bitwarden, le trousseau… \
-             Elles sont affichées masquées et exclues de la recherche.",
+             Chiffrées sur le disque avec une clé gardée dans le trousseau macOS, \
+             affichées masquées et exclues de la recherche.",
             p,
         );
+        if let Some(err) = storage::encryption_error() {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(format!(
+                        "⚠ Trousseau inaccessible ({err}) : les mots de passe restent en mémoire, \
+                         sans être enregistrés."
+                    ))
+                    .size(11.5)
+                    .color(p.danger),
+                )
+                .wrap(),
+            );
+        }
         let stored = self.history.lock_safe().sensitive_count();
         if stored > 0 {
             ui.add_space(4.0);

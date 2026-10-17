@@ -92,7 +92,7 @@ impl History {
                 if self.items.len() > MAX_ITEMS {
                     for evicted in self.items.split_off(MAX_ITEMS) {
                         if let Some(store) = &self.store {
-                            store.delete(&evicted.text);
+                            store.delete(&evicted);
                         }
                     }
                 }
@@ -109,7 +109,7 @@ impl History {
         let removed = (index < self.items.len()).then(|| self.items.remove(index));
         if let Some(item) = &removed {
             if let Some(store) = &self.store {
-                store.delete(&item.text);
+                store.delete(item);
             }
             self.version += 1;
         }
@@ -127,7 +127,7 @@ impl History {
         self.items.retain(|it| {
             if it.sensitive {
                 if let Some(store) = store {
-                    store.delete(&it.text);
+                    store.delete(it);
                 }
             }
             !it.sensitive
@@ -303,8 +303,9 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("copyq-rs-hist-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let db = dir.join("h.db");
+        let key = crate::crypto::generate_key();
         {
-            let (store, items) = Store::open(db.clone(), None).unwrap();
+            let (store, items) = Store::open(db.clone(), None, Box::new(move || Ok(key))).unwrap();
             let mut h = History::with_store(store.clone(), items);
             h.push("un".into());
             h.push("deux".into());
@@ -313,7 +314,7 @@ mod tests {
             h.remove(1); // supprime « trois »
             assert!(store.close(Duration::from_secs(5)));
         }
-        let (store, items) = Store::open(db, None).unwrap();
+        let (store, items) = Store::open(db, None, Box::new(move || Ok(key))).unwrap();
         let texts: Vec<_> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, vec!["un", "deux"]);
         store.close(Duration::from_secs(5));
