@@ -103,8 +103,7 @@ pub fn paste_into_previous() -> Outcome {
 #[cfg(target_os = "macos")]
 mod imp {
     use objc2::rc::autoreleasepool;
-    use objc2::runtime::AnyObject;
-    use objc2::{class, msg_send};
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
     use std::ffi::c_void;
 
     type CFTypeRef = *const c_void;
@@ -164,29 +163,24 @@ mod imp {
     }
 
     pub fn frontmost_pid() -> Option<i32> {
-        autoreleasepool(|_| unsafe {
-            let ws: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
-            let app: *mut AnyObject = msg_send![ws, frontmostApplication];
-            if app.is_null() {
-                return None;
-            }
-            let pid: i32 = msg_send![app, processIdentifier];
-            Some(pid)
+        autoreleasepool(|_| {
+            NSWorkspace::sharedWorkspace()
+                .frontmostApplication()
+                .map(|app| app.processIdentifier())
         })
     }
 
     pub fn activate(pid: i32) -> bool {
-        autoreleasepool(|_| unsafe {
-            let app: *mut AnyObject = msg_send![
-                class!(NSRunningApplication),
-                runningApplicationWithProcessIdentifier: pid
-            ];
-            if app.is_null() {
+        autoreleasepool(|_| {
+            let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)
+            else {
                 return false;
-            }
-            // NSApplicationActivateIgnoringOtherApps (2) : ignoré depuis macOS 14,
-            // où l'activation suit simplement le masquage de notre fenêtre.
-            msg_send![app, activateWithOptions: 2usize]
+            };
+            // « Ignorer les autres apps » : sans effet depuis macOS 14, où l'activation
+            // suit simplement le masquage de notre fenêtre.
+            #[allow(deprecated)]
+            let options = NSApplicationActivationOptions::ActivateIgnoringOtherApps;
+            app.activateWithOptions(options)
         })
     }
 

@@ -91,63 +91,30 @@ pub fn looks_like_password(text: &str) -> bool {
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use objc2::rc::autoreleasepool;
-    use objc2::runtime::AnyObject;
-    use objc2::{class, msg_send};
-    use std::ffi::{c_char, CStr, CString};
+    //! Accès au presse-papiers par les interfaces typées d'AppKit (objc2) :
+    //! pas d'envoi de message brut, donc pas de bloc `unsafe`.
+    use objc2::rc::{autoreleasepool, Retained};
+    use objc2::runtime::ProtocolObject;
+    use objc2_app_kit::{NSPasteboard, NSPasteboardWriting};
+    use objc2_foundation::{NSArray, NSString, NSURL};
     use std::path::PathBuf;
-
-    fn general() -> *mut AnyObject {
-        unsafe { msg_send![class!(NSPasteboard), generalPasteboard] }
-    }
-
-    unsafe fn ns_string(s: &str) -> Option<*mut AnyObject> {
-        let c = CString::new(s).ok()?;
-        let ns: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c.as_ptr()];
-        (!ns.is_null()).then_some(ns)
-    }
-
-    unsafe fn rust_string(ns: *mut AnyObject) -> Option<String> {
-        if ns.is_null() {
-            return None;
-        }
-        let c: *const c_char = msg_send![ns, UTF8String];
-        (!c.is_null()).then(|| CStr::from_ptr(c).to_string_lossy().into_owned())
-    }
 
     /// Chemins des fichiers copiés (le Finder fournit souvent des URL de type
     /// « file:///.file/id=… », résolues ici en vrais chemins).
     pub fn file_paths() -> Vec<PathBuf> {
-        autoreleasepool(|_| unsafe {
-            let pb = general();
-            if pb.is_null() {
-                return Vec::new();
-            }
-            let items: *mut AnyObject = msg_send![pb, pasteboardItems];
-            let Some(file_url) = ns_string("public.file-url") else {
+        autoreleasepool(|_| {
+            let pb = NSPasteboard::generalPasteboard();
+            let Some(items) = pb.pasteboardItems() else {
                 return Vec::new();
             };
-            if items.is_null() {
-                return Vec::new();
-            }
-            let n: usize = msg_send![items, count];
-            (0..n)
-                .filter_map(|i| {
-                    let item: *mut AnyObject = msg_send![items, objectAtIndex: i];
-                    let s: *mut AnyObject = msg_send![item, stringForType: file_url];
-                    if s.is_null() {
-                        return None;
-                    }
-                    let url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: s];
-                    if url.is_null() {
-                        return None;
-                    }
-                    let resolved: *mut AnyObject = msg_send![url, filePathURL];
-                    if resolved.is_null() {
-                        return None;
-                    }
-                    let path: *mut AnyObject = msg_send![resolved, path];
-                    rust_string(path).map(PathBuf::from)
+            let file_url = NSString::from_str("public.file-url");
+            items
+                .iter()
+                .filter_map(|item| {
+                    let s = item.stringForType(&file_url)?;
+                    let url = NSURL::URLWithString(&s)?;
+                    let path = url.filePathURL()?.path()?;
+                    Some(PathBuf::from(path.to_string()))
                 })
                 .collect()
         })
@@ -155,64 +122,38 @@ mod imp {
 
     /// Remet des fichiers dans le presse-papiers (collables dans le Finder, un mail…).
     pub fn write_file_paths(paths: &[PathBuf]) -> bool {
-        autoreleasepool(|_| unsafe {
-            let pb = general();
-            if pb.is_null() {
+        autoreleasepool(|_| {
+            let urls: Vec<Retained<ProtocolObject<dyn NSPasteboardWriting>>> = paths
+                .iter()
+                .filter_map(|p| p.to_str())
+                .map(|p| {
+                    let url = NSURL::fileURLWithPath(&NSString::from_str(p));
+                    ProtocolObject::from_retained(url)
+                })
+                .collect();
+            if urls.is_empty() {
                 return false;
             }
-            let array: *mut AnyObject = msg_send![class!(NSMutableArray), array];
-            for p in paths {
-                let Some(s) = p.to_str().and_then(|s| ns_string(s)) else {
-                    continue;
-                };
-                let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: s];
-                if !url.is_null() {
-                    let _: () = msg_send![array, addObject: url];
-                }
-            }
-            let count: usize = msg_send![array, count];
-            if count == 0 {
-                return false;
-            }
-            let _: isize = msg_send![pb, clearContents];
-            msg_send![pb, writeObjects: array]
+            let pb = NSPasteboard::generalPasteboard();
+            pb.clearContents();
+            pb.writeObjects(&NSArray::from_retained_slice(&urls))
         })
     }
 
     /// Compteur incrémenté par macOS à chaque nouvelle copie, quelle que soit l'app.
     pub fn change_count() -> Option<isize> {
-        autoreleasepool(|_| {
-            let pb = general();
-            if pb.is_null() {
-                return None;
-            }
-            let count: isize = unsafe { msg_send![pb, changeCount] };
-            Some(count)
-        })
+        Some(autoreleasepool(|_| {
+            NSPasteboard::generalPasteboard().changeCount()
+        }))
     }
 
     /// Identifiants des types présents (UTI), sans lire les données.
     pub fn types() -> Vec<String> {
-        autoreleasepool(|_| unsafe {
-            let pb = general();
-            if pb.is_null() {
-                return Vec::new();
-            }
-            let array: *mut AnyObject = msg_send![pb, types];
-            if array.is_null() {
-                return Vec::new();
-            }
-            let n: usize = msg_send![array, count];
-            (0..n)
-                .filter_map(|i| {
-                    let s: *mut AnyObject = msg_send![array, objectAtIndex: i];
-                    if s.is_null() {
-                        return None;
-                    }
-                    let c: *const c_char = msg_send![s, UTF8String];
-                    (!c.is_null()).then(|| CStr::from_ptr(c).to_string_lossy().into_owned())
-                })
-                .collect()
+        autoreleasepool(|_| {
+            NSPasteboard::generalPasteboard()
+                .types()
+                .map(|types| types.iter().map(|t| t.to_string()).collect())
+                .unwrap_or_default()
         })
     }
 }

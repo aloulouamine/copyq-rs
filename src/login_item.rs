@@ -15,40 +15,31 @@ pub enum Status {
 #[cfg(target_os = "macos")]
 mod imp {
     use super::Status;
-    use objc2::msg_send;
-    use objc2::rc::autoreleasepool;
-    use objc2::runtime::{AnyClass, AnyObject};
-    use std::ffi::{c_char, CStr};
+    use objc2::rc::{autoreleasepool, Retained};
+    use objc2::runtime::AnyClass;
+    use objc2_foundation::NSBundle;
+    use objc2_service_management::SMAppService;
 
-    #[link(name = "ServiceManagement", kind = "framework")]
-    extern "C" {}
-
-    fn service() -> Option<*mut AnyObject> {
-        let class = AnyClass::get("SMAppService")?;
-        let svc: *mut AnyObject = unsafe { msg_send![class, mainAppService] };
-        (!svc.is_null()).then_some(svc)
+    /// Service de l'app principale ; `None` avant macOS 13 (classe absente).
+    fn service() -> Option<Retained<SMAppService>> {
+        AnyClass::get(c"SMAppService")?;
+        // SAFETY : la classe existe (vérifié ci-dessus) ; méthode de classe sans argument.
+        Some(unsafe { SMAppService::mainAppService() })
     }
 
     /// Vrai si le processus tourne depuis un paquet `.app` doté d'un identifiant.
     pub fn is_bundled() -> bool {
-        autoreleasepool(|_| unsafe {
-            let Some(class) = AnyClass::get("NSBundle") else {
-                return false;
-            };
-            let bundle: *mut AnyObject = msg_send![class, mainBundle];
-            if bundle.is_null() {
-                return false;
-            }
-            let id: *mut AnyObject = msg_send![bundle, bundleIdentifier];
-            let path: *mut AnyObject = msg_send![bundle, bundlePath];
-            !id.is_null() && nsstring(path).is_some_and(|p| p.ends_with(".app"))
+        autoreleasepool(|_| {
+            let bundle = NSBundle::mainBundle();
+            bundle.bundleIdentifier().is_some() && bundle.bundlePath().to_string().ends_with(".app")
         })
     }
 
     pub fn raw_status() -> Option<isize> {
         autoreleasepool(|_| {
             let svc = service()?;
-            Some(unsafe { msg_send![svc, status] })
+            // SAFETY : simple lecture de l'état du service.
+            Some(unsafe { svc.status() }.0)
         })
     }
 
@@ -61,46 +52,25 @@ mod imp {
             Some(2) => Status::RequiresApproval,
             // 0 = non inscrite ; 3 = « introuvable », renvoyé tant que l'app
             // principale n'a jamais été inscrite : l'inscription reste possible.
-            Some(0) | Some(3) => Status::Disabled,
+            Some(0 | 3) => Status::Disabled,
             _ => Status::Unavailable,
         }
-    }
-
-    unsafe fn nsstring(s: *mut AnyObject) -> Option<String> {
-        if s.is_null() {
-            return None;
-        }
-        let c: *const c_char = msg_send![s, UTF8String];
-        (!c.is_null()).then(|| CStr::from_ptr(c).to_string_lossy().into_owned())
     }
 
     pub fn set_enabled(enabled: bool) -> Result<(), String> {
         autoreleasepool(|_| {
             let svc = service().ok_or("lancement au démarrage indisponible sur ce macOS")?;
-            let mut error: *mut AnyObject = std::ptr::null_mut();
-            let ok: bool = unsafe {
+            // SAFETY : (dés)inscription de l'app elle-même ; l'erreur éventuelle est
+            // renvoyée sous forme de `NSError`.
+            let result = unsafe {
                 if enabled {
-                    msg_send![svc, registerAndReturnError: &mut error as *mut *mut AnyObject]
+                    svc.registerAndReturnError()
                 } else {
-                    msg_send![svc, unregisterAndReturnError: &mut error as *mut *mut AnyObject]
+                    svc.unregisterAndReturnError()
                 }
             };
-            if ok {
-                Ok(())
-            } else {
-                Err(describe(error))
-            }
+            result.map_err(|e| e.localizedDescription().to_string())
         })
-    }
-
-    fn describe(error: *mut AnyObject) -> String {
-        if error.is_null() {
-            return "erreur inconnue".into();
-        }
-        unsafe {
-            let desc: *mut AnyObject = msg_send![error, localizedDescription];
-            nsstring(desc).unwrap_or_else(|| "erreur inconnue".into())
-        }
     }
 }
 

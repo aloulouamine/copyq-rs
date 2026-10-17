@@ -9,49 +9,49 @@ use eframe::egui;
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use objc2::runtime::AnyObject;
-    use objc2::{class, msg_send};
+    use objc2::{sel, MainThreadMarker};
+    use objc2_app_kit::NSApplication;
 
-    fn ns_app() -> *mut AnyObject {
-        unsafe { msg_send![class!(NSApplication), sharedApplication] }
+    /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
+    fn app() -> Option<objc2::rc::Retained<NSApplication>> {
+        let mtm = MainThreadMarker::new();
+        if mtm.is_none() {
+            log::warn!("fenêtre : appel hors du thread principal ignoré");
+        }
+        mtm.map(NSApplication::sharedApplication)
     }
 
     pub fn hide() {
-        unsafe {
-            let app = ns_app();
-            let _: () = msg_send![app, hide: std::ptr::null_mut::<AnyObject>()];
+        if let Some(app) = app() {
+            app.hide(None);
         }
     }
 
     pub fn show() {
-        unsafe {
-            let app = ns_app();
-            let _: () = msg_send![app, unhide: std::ptr::null_mut::<AnyObject>()];
-            let _: () = msg_send![app, activateIgnoringOtherApps: true];
+        if let Some(app) = app() {
+            app.unhide(None);
+            // Seule façon de passer devant l'app active avant macOS 14.
+            #[allow(deprecated)]
+            app.activateIgnoringOtherApps(true);
         }
     }
 
     /// Réaffiche l'app depuis n'importe quel thread (AppKit exige le thread principal).
     pub fn unhide_from_any_thread() {
+        // `sharedApplication` sans marqueur de thread principal : l'objet est seulement
+        // utilisé pour programmer `unhide:` sur le thread principal.
+        let app: objc2::rc::Retained<NSApplication> =
+            unsafe { objc2::msg_send![objc2::class!(NSApplication), sharedApplication] };
+        // SAFETY : `unhide:` prend un objet facultatif (nil) et sera exécuté sur le
+        // thread principal par AppKit.
         unsafe {
-            let app = ns_app();
-            let _: () = msg_send![
-                app,
-                performSelectorOnMainThread: objc2::sel!(unhide:),
-                withObject: std::ptr::null_mut::<AnyObject>(),
-                waitUntilDone: false
-            ];
+            app.performSelectorOnMainThread_withObject_waitUntilDone(sel!(unhide:), None, false);
         }
     }
 
     /// Vrai si l'application est au premier plan et non masquée.
     pub fn is_frontmost() -> bool {
-        unsafe {
-            let app = ns_app();
-            let active: bool = msg_send![app, isActive];
-            let hidden: bool = msg_send![app, isHidden];
-            active && !hidden
-        }
+        app().is_some_and(|app| app.isActive() && !app.isHidden())
     }
 }
 
