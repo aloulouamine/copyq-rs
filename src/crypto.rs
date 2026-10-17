@@ -56,7 +56,9 @@ impl Cipher {
 
     pub fn decrypt(&self, stored: &str) -> Result<String, String> {
         let encoded = stored.strip_prefix(PREFIX).ok_or("format inconnu")?;
-        let blob = B64.decode(encoded).map_err(|_| "base64 invalide".to_string())?;
+        let blob = B64
+            .decode(encoded)
+            .map_err(|_| "base64 invalide".to_string())?;
         if blob.len() < NONCE_LEN + 16 {
             return Err("donnée tronquée".into());
         }

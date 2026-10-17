@@ -44,12 +44,19 @@ pub fn selftest() -> i32 {
             let c = crypto::Cipher::new(a);
             let enc = c.encrypt("test").unwrap_or_default();
             let ok = c.decrypt(&enc).as_deref() == Ok("test");
-            println!("clé lue deux fois à l'identique ; chiffrement : {}", if ok { "OK" } else { "ÉCHEC" });
+            println!(
+                "clé lue deux fois à l'identique ; chiffrement : {}",
+                if ok { "OK" } else { "ÉCHEC" }
+            );
             println!("{}", if ok { "SUCCÈS" } else { "ÉCHEC" });
             i32::from(!ok)
         }
         _ => {
-            println!("ÉCHEC : {first:?} / {second:?}", first = first.as_ref().map(|_| "clé"), second = second.as_ref().map(|_| "clé"));
+            println!(
+                "ÉCHEC : {first:?} / {second:?}",
+                first = first.as_ref().map(|_| "clé"),
+                second = second.as_ref().map(|_| "clé")
+            );
             1
         }
     }

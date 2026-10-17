@@ -74,15 +74,23 @@ impl Store {
     }
 
     pub fn upsert(&self, item: &Item) {
-        let _ = self.tx.send(Cmd::Upsert(item.clone()));
+        self.send(Cmd::Upsert(item.clone()));
     }
 
     pub fn delete(&self, item: &Item) {
-        let _ = self.tx.send(Cmd::Delete(item.clone()));
+        self.send(Cmd::Delete(item.clone()));
     }
 
     pub fn clear(&self) {
-        let _ = self.tx.send(Cmd::Clear);
+        self.send(Cmd::Clear);
+    }
+
+    /// Le fil de la base ne s'arrête qu'à la fermeture ou sur une panique (journalisée) :
+    /// une écriture perdue ensuite est signalée plutôt que passée sous silence.
+    fn send(&self, cmd: Cmd) {
+        if self.tx.send(cmd).is_err() {
+            log::error!("base arrêtée : modification non enregistrée");
+        }
     }
 
     /// Termine les écritures, ferme la base et arrête le thread.
@@ -116,7 +124,10 @@ fn worker(
     rx: Receiver<Cmd>,
     ready: Sender<Result<Vec<Item>, String>>,
 ) {
-    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             let _ = ready.send(Err(e.to_string()));
@@ -214,16 +225,27 @@ impl Db {
         )
         .await
         .map_err(|e| format!("création du schéma : {e}"))?;
-        let db = Db { conn, keys, cipher: None };
-        db.add_column_if_missing("sensitive", "INTEGER NOT NULL DEFAULT 0").await?;
+        let db = Db {
+            conn,
+            keys,
+            cipher: None,
+        };
+        db.add_column_if_missing("sensitive", "INTEGER NOT NULL DEFAULT 0")
+            .await?;
         db.add_column_if_missing("fingerprint", "TEXT").await?;
-        db.add_column_if_missing("kind", "TEXT NOT NULL DEFAULT 'text'").await?;
-        db.add_column_if_missing("meta", "TEXT NOT NULL DEFAULT ''").await?;
+        db.add_column_if_missing("kind", "TEXT NOT NULL DEFAULT 'text'")
+            .await?;
+        db.add_column_if_missing("meta", "TEXT NOT NULL DEFAULT ''")
+            .await?;
         Ok(db)
     }
 
     async fn exec(&self, sql: &str) -> Result<(), String> {
-        self.conn.execute(sql, ()).await.map(|_| ()).map_err(|e| e.to_string())
+        self.conn
+            .execute(sql, ())
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     /// Bases créées par une version antérieure : ajoute la colonne manquante.
@@ -256,7 +278,11 @@ impl Db {
         }
     }
 
-    async fn load_initial(&mut self, path: &Path, legacy_json: Option<&Path>) -> Result<Vec<Item>, String> {
+    async fn load_initial(
+        &mut self,
+        path: &Path,
+        legacy_json: Option<&Path>,
+    ) -> Result<Vec<Item>, String> {
         let mut items = self.load().await?;
         if items.is_empty() {
             if let Some(json) = legacy_json {
@@ -265,7 +291,11 @@ impl Db {
                 }
             }
         }
-        log::info!("base ouverte : {} éléments ({})", items.len(), path.display());
+        log::info!(
+            "base ouverte : {} éléments ({})",
+            items.len(),
+            path.display()
+        );
         Ok(items)
     }
 
@@ -410,7 +440,8 @@ impl Db {
             Ok::<(), String>(())
         }
         .await;
-        self.exec(if result.is_ok() { "COMMIT" } else { "ROLLBACK" }).await?;
+        self.exec(if result.is_ok() { "COMMIT" } else { "ROLLBACK" })
+            .await?;
         result
     }
 
@@ -449,7 +480,11 @@ impl Db {
         if let Err(e) = std::fs::rename(json, &done) {
             log::warn!("migration faite mais {} non renommé : {e}", json.display());
         }
-        log::info!("{} éléments importés depuis {}", legacy.len(), json.display());
+        log::info!(
+            "{} éléments importés depuis {}",
+            legacy.len(),
+            json.display()
+        );
         Ok(legacy.len())
     }
 }
@@ -473,7 +508,9 @@ mod tests {
     }
 
     fn contains(haystack: &[u8], needle: &str) -> bool {
-        haystack.windows(needle.len()).any(|w| w == needle.as_bytes())
+        haystack
+            .windows(needle.len())
+            .any(|w| w == needle.as_bytes())
     }
 
     fn secret(text: &str, at: u64) -> Item {
@@ -562,7 +599,10 @@ mod tests {
         let dir = temp_dir("schema");
         let db = dir.join("h.db");
         // Base au format v0.1 (sans colonne `sensitive`).
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         rt.block_on(async {
             let d = turso::Builder::new_local(db.to_str().unwrap()).build().await.unwrap();
             let c = d.connect().unwrap();
@@ -600,7 +640,10 @@ mod tests {
             assert!(store.close(Duration::from_secs(5)));
         }
         let bytes = file_bytes(&db);
-        assert!(!contains(&bytes, pw), "le mot de passe ne doit jamais apparaître en clair");
+        assert!(
+            !contains(&bytes, pw),
+            "le mot de passe ne doit jamais apparaître en clair"
+        );
         assert!(contains(&bytes, "texte ordinaire visible"));
 
         // Même clé : déchiffré au chargement.
@@ -656,14 +699,22 @@ mod tests {
         store.upsert(&item("a", 1));
         store.upsert(&item("b", 2));
         assert!(store.close(Duration::from_secs(5)));
-        assert_eq!(calls.load(Ordering::SeqCst), 0, "pas de trousseau sans mot de passe");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "pas de trousseau sans mot de passe"
+        );
 
         let (store, _) = Store::open(db, None, None, counting(calls.clone())).unwrap();
         store.upsert(&secret("x1", 3));
         store.upsert(&secret("x2", 4));
         store.delete(&secret("x1", 0));
         assert!(store.close(Duration::from_secs(5)));
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "clé demandée une seule fois");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "clé demandée une seule fois"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -693,11 +744,17 @@ mod tests {
         let k = crypto::generate_key();
         let dir = temp_dir("upgrade-pw");
         let db = dir.join("h.db");
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         let raw = |sql: &'static str| {
             let db = db.clone();
             rt.block_on(async move {
-                let d = turso::Builder::new_local(db.to_str().unwrap()).build().await.unwrap();
+                let d = turso::Builder::new_local(db.to_str().unwrap())
+                    .build()
+                    .await
+                    .unwrap();
                 let c = d.connect().unwrap();
                 let mut out = Vec::new();
                 if sql.starts_with("SELECT") {
@@ -723,7 +780,11 @@ mod tests {
         assert!(items[0].sensitive);
         let stored = raw("SELECT text FROM items");
         assert_eq!(stored.len(), 1);
-        assert!(crypto::is_encrypted(&stored[0]), "réécrit chiffré : {}", stored[0]);
+        assert!(
+            crypto::is_encrypted(&stored[0]),
+            "réécrit chiffré : {}",
+            stored[0]
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -762,7 +823,10 @@ mod tests {
 
         store.delete(&image);
         assert!(store.close(Duration::from_secs(5)));
-        assert!(!crate::media::full_path(&images, &saved.hash).exists(), "fichier image supprimé");
+        assert!(
+            !crate::media::full_path(&images, &saved.hash).exists(),
+            "fichier image supprimé"
+        );
         let (store, items) = Store::open(db, None, Some(images), keys(k)).unwrap();
         store.close(Duration::from_secs(5));
         assert_eq!(items, vec![files]);

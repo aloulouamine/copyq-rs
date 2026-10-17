@@ -32,7 +32,9 @@ mod imp {
     /// Vrai si le processus tourne depuis un paquet `.app` doté d'un identifiant.
     pub fn is_bundled() -> bool {
         autoreleasepool(|_| unsafe {
-            let Some(class) = AnyClass::get("NSBundle") else { return false };
+            let Some(class) = AnyClass::get("NSBundle") else {
+                return false;
+            };
             let bundle: *mut AnyObject = msg_send![class, mainBundle];
             if bundle.is_null() {
                 return false;
@@ -119,8 +121,8 @@ mod imp {
     }
 }
 
-pub use imp::{set_enabled, status};
 use imp::{is_bundled, raw_status};
+pub use imp::{set_enabled, status};
 
 /// Auto-test lancé par la CI dans une app empaquetée : `copyq-rs --login-item-selftest`.
 pub fn selftest() -> i32 {

@@ -34,11 +34,19 @@ pub fn acquire(dir: &Path) -> Instance {
     let lock_path = dir.join("instance.lock");
     let socket_path = dir.join("instance.sock");
 
-    let lock = match OpenOptions::new().create(true).truncate(false).write(true).open(&lock_path) {
+    let lock = match OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+    {
         Ok(f) => f,
         Err(e) => {
             log::warn!("verrou d'instance impossible ({e}) : on continue sans");
-            return Instance::Primary(Primary { lock: None, listener: None });
+            return Instance::Primary(Primary {
+                lock: None,
+                listener: None,
+            });
         }
     };
 
@@ -49,7 +57,10 @@ pub fn acquire(dir: &Path) -> Instance {
             let listener = UnixListener::bind(&socket_path)
                 .map_err(|e| log::warn!("socket d'instance indisponible : {e}"))
                 .ok();
-            Instance::Primary(Primary { lock: Some(lock), listener })
+            Instance::Primary(Primary {
+                lock: Some(lock),
+                listener,
+            })
         }
         Err(_) => {
             notify_running(&socket_path);
@@ -60,10 +71,10 @@ pub fn acquire(dir: &Path) -> Instance {
 
 fn notify_running(socket_path: &Path) {
     match UnixStream::connect(socket_path) {
-        Ok(mut stream) => {
-            let _ = writeln!(stream, "{SHOW}");
-            log::info!("CopyQ-rs est déjà lancé : fenêtre existante affichée");
-        }
+        Ok(mut stream) => match writeln!(stream, "{SHOW}") {
+            Ok(()) => log::info!("CopyQ-rs est déjà lancé : fenêtre existante affichée"),
+            Err(e) => log::warn!("CopyQ-rs est déjà lancé mais n'a pas reçu la demande : {e}"),
+        },
         Err(e) => log::warn!("CopyQ-rs est déjà lancé mais injoignable : {e}"),
     }
 }
@@ -107,7 +118,10 @@ mod tests {
         // Même processus, autre descripteur : le verrou flock est déjà pris.
         assert!(matches!(acquire(&dir), Instance::Secondary));
         drop(first);
-        assert!(matches!(acquire(&dir), Instance::Primary(_)), "verrou libéré à la fermeture");
+        assert!(
+            matches!(acquire(&dir), Instance::Primary(_)),
+            "verrou libéré à la fermeture"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

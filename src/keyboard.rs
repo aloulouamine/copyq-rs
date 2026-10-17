@@ -40,7 +40,10 @@ const LETTER_KEYS: [(u16, Code); 26] = [
 /// Touche physique qui produit `ch` avec la disposition active, ou `None` si inconnue.
 pub fn code_for_char(ch: char) -> Option<Code> {
     let vk = vk_for_char(ch)?;
-    LETTER_KEYS.iter().find(|(k, _)| *k == vk).map(|(_, code)| *code)
+    LETTER_KEYS
+        .iter()
+        .find(|(k, _)| *k == vk)
+        .map(|(_, code)| *code)
 }
 
 /// Code virtuel macOS de la touche qui produit `ch` avec la disposition active.
@@ -59,7 +62,10 @@ pub fn ansi_vk(ch: char) -> Option<u16> {
         'z' => Code::KeyZ,
         _ => return None,
     };
-    LETTER_KEYS.iter().find(|(_, c)| *c == code).map(|(vk, _)| *vk)
+    LETTER_KEYS
+        .iter()
+        .find(|(_, c)| *c == code)
+        .map(|(vk, _)| *vk)
 }
 
 #[cfg(target_os = "macos")]

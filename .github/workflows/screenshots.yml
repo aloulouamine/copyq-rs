@@ -35,6 +35,19 @@ jobs:
           key: macos-cargo-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
           restore-keys: macos-cargo-
 
+      # Formatage et Clippy (sans aucun avertissement) : un échec ne bloque pas les
+      # étapes suivantes (captures, journaux), mais fait échouer la chaîne à la fin.
+      - name: Formatage et Clippy
+        id: lint
+        continue-on-error: true
+        run: |
+          rustup component add rustfmt clippy
+          set +e
+          cargo fmt --check > lint.log 2>&1; fmt=$?
+          cargo clippy --all-targets -- -D warnings >> lint.log 2>&1; clippy=$?
+          echo "rustfmt: $fmt ; clippy: $clippy" | tee -a lint.log
+          [ $fmt -eq 0 ] && [ $clippy -eq 0 ]
+
       - name: Tests
         run: cargo test --release 2>&1 | tee test.log
 
@@ -98,7 +111,7 @@ jobs:
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log login.log keychain.log media.log paste.log /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r shots build.log test.log e2e.log e2e-app.log lint.log login.log keychain.log media.log paste.log /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b ci-results
           git config user.name "github-actions"
@@ -106,3 +119,9 @@ jobs:
           echo "${GITHUB_SHA}" > commit.txt
           git add -A && git commit -qm "Résultats CI pour ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-results
+
+      - name: Verdict formatage / Clippy
+        if: steps.lint.outcome == 'failure'
+        run: |
+          echo "rustfmt ou Clippy en échec : voir lint.log sur la branche ci-results"
+          exit 1

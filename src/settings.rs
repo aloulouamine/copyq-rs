@@ -81,7 +81,9 @@ impl Settings {
         self.max_items = c(self.max_items, &ITEMS_RANGE);
         self.max_images = c(self.max_images, &IMAGES_RANGE);
         self.max_text_kb = c(self.max_text_kb, &TEXT_KB_RANGE);
-        self.max_image_mp = self.max_image_mp.clamp(*IMAGE_MP_RANGE.start(), *IMAGE_MP_RANGE.end());
+        self.max_image_mp = self
+            .max_image_mp
+            .clamp(*IMAGE_MP_RANGE.start(), *IMAGE_MP_RANGE.end());
     }
 
     /// Les limites (seulement) remises aux valeurs par défaut.
@@ -102,10 +104,15 @@ impl Settings {
     /// Lit les réglages ; valeurs par défaut si le fichier est absent ou illisible.
     pub fn load(path: &Path) -> Self {
         match fs::read_to_string(path) {
-            Ok(s) => serde_json::from_str::<Self>(&s).map(|mut st| { st.clamp(); st }).unwrap_or_else(|e| {
-                log::warn!("réglages illisibles ({e}) : valeurs par défaut");
-                Self::default()
-            }),
+            Ok(s) => serde_json::from_str::<Self>(&s)
+                .map(|mut st| {
+                    st.clamp();
+                    st
+                })
+                .unwrap_or_else(|e| {
+                    log::warn!("réglages illisibles ({e}) : valeurs par défaut");
+                    Self::default()
+                }),
             Err(_) => Self::default(),
         }
     }
@@ -138,7 +145,10 @@ mod tests {
     #[test]
     fn defaults_are_safe() {
         let s = Settings::default();
-        assert!(!s.save_passwords, "les mots de passe doivent être ignorés par défaut");
+        assert!(
+            !s.save_passwords,
+            "les mots de passe doivent être ignorés par défaut"
+        );
         assert!(s.hide_after_copy);
         assert!(s.detect_passwords);
     }
@@ -160,7 +170,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("copyq-rs-limits-{}", std::process::id()));
         let path = dir.join("settings.json");
         fs::create_dir_all(&dir).unwrap();
-        fs::write(&path, r#"{"max_items": 3, "max_image_mp": 9999, "auto_paste": false}"#).unwrap();
+        fs::write(
+            &path,
+            r#"{"max_items": 3, "max_image_mp": 9999, "auto_paste": false}"#,
+        )
+        .unwrap();
         let s = Settings::load(&path);
         assert_eq!(s.max_items, 10);
         assert_eq!(s.max_image_mp, 200);
@@ -198,7 +212,11 @@ mod tests {
         assert!(partial.hide_after_copy, "champ absent → valeur par défaut");
 
         fs::write(&path, "pas du json").unwrap();
-        assert_eq!(Settings::load(&path), Settings::default(), "fichier corrompu");
+        assert_eq!(
+            Settings::load(&path),
+            Settings::default(),
+            "fichier corrompu"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -48,9 +48,12 @@ pub fn request_trust() {
 }
 
 pub fn open_accessibility_settings() {
-    let _ = std::process::Command::new("open")
+    if let Err(e) = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn();
+        .spawn()
+    {
+        log::warn!("ouverture des réglages d'accessibilité impossible : {e}");
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -70,7 +73,9 @@ pub fn paste_into_previous() -> Outcome {
         request_trust();
         return Outcome::NotTrusted;
     }
-    let Some(pid) = previous_app() else { return Outcome::NoTarget };
+    let Some(pid) = previous_app() else {
+        return Outcome::NoTarget;
+    };
     if !imp::activate(pid) {
         return Outcome::NoTarget;
     }
@@ -80,7 +85,9 @@ pub fn paste_into_previous() -> Outcome {
         let deadline = Instant::now() + Duration::from_millis(800);
         while imp::frontmost_pid() != Some(pid) {
             if Instant::now() > deadline {
-                log::warn!("collage annulé : l'application d'origine n'est pas revenue au premier plan");
+                log::warn!(
+                    "collage annulé : l'application d'origine n'est pas revenue au premier plan"
+                );
                 return;
             }
             thread::sleep(Duration::from_millis(20));

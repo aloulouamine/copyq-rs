@@ -63,12 +63,21 @@ pub struct Item {
 
 impl Item {
     pub fn text(text: impl Into<String>, copied_at: u64, sensitive: bool) -> Self {
-        Item { text: text.into(), copied_at, sensitive, ..Default::default() }
+        Item {
+            text: text.into(),
+            copied_at,
+            sensitive,
+            ..Default::default()
+        }
     }
 
     /// Chemins d'un élément « fichiers ».
     pub fn paths(&self) -> Vec<PathBuf> {
-        self.text.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect()
+        self.text
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(PathBuf::from)
+            .collect()
     }
 }
 
@@ -143,9 +152,12 @@ impl History {
 
     /// Supprime les éléments plus anciens que la durée de conservation.
     pub fn expire(&mut self, now: u64) -> usize {
-        let Some(cutoff) = cutoff(self.limits, now) else { return 0 };
-        let (old, keep): (Vec<Item>, Vec<Item>) =
-            std::mem::take(&mut self.items).into_iter().partition(|it| it.copied_at < cutoff);
+        let Some(cutoff) = cutoff(self.limits, now) else {
+            return 0;
+        };
+        let (old, keep): (Vec<Item>, Vec<Item>) = std::mem::take(&mut self.items)
+            .into_iter()
+            .partition(|it| it.copied_at < cutoff);
         self.items = keep;
         if let Some(store) = &self.store {
             for item in &old {
@@ -222,8 +234,7 @@ impl History {
         let mut kept = Vec::with_capacity(self.items.len());
         for item in std::mem::take(&mut self.items) {
             let is_image = item.kind == ItemKind::Image;
-            if kept.len() >= self.limits.max_items
-                || (is_image && images >= self.limits.max_images)
+            if kept.len() >= self.limits.max_items || (is_image && images >= self.limits.max_images)
             {
                 evicted.push(item);
                 continue;
@@ -352,7 +363,8 @@ impl History {
 }
 
 fn cutoff(limits: Limits, now: u64) -> Option<u64> {
-    (limits.retention_days > 0).then(|| now.saturating_sub(u64::from(limits.retention_days) * 86_400))
+    (limits.retention_days > 0)
+        .then(|| now.saturating_sub(u64::from(limits.retention_days) * 86_400))
 }
 
 /// Combien d'éléments resteraient avec ces limites (même règle que `evict` + `expire`).
@@ -462,7 +474,10 @@ mod tests {
         assert!(h.push_with("motdepasse123".into(), true));
         h.push("texte ordinaire".into());
         assert!(h.items()[1].sensitive);
-        assert!(h.search("motdepasse").is_empty(), "jamais trouvé par la recherche");
+        assert!(
+            h.search("motdepasse").is_empty(),
+            "jamais trouvé par la recherche"
+        );
         assert_eq!(h.search("").len(), 2, "mais bien listé");
         // Recopié comme texte ordinaire : reste masqué.
         h.push("motdepasse123".into());
@@ -508,9 +523,18 @@ mod tests {
     #[test]
     fn images_and_files_dedup_by_kind_and_are_capped() {
         let mut h = h();
-        let img = |hash: &str| Item { text: hash.into(), kind: ItemKind::Image, meta: "1 × 1 · 1 o".into(), ..Default::default() };
+        let img = |hash: &str| Item {
+            text: hash.into(),
+            kind: ItemKind::Image,
+            meta: "1 × 1 · 1 o".into(),
+            ..Default::default()
+        };
         assert!(h.push_item(img("aaa")));
-        assert!(h.push_item(Item { text: "/tmp/a.mov".into(), kind: ItemKind::Files, ..Default::default() }));
+        assert!(h.push_item(Item {
+            text: "/tmp/a.mov".into(),
+            kind: ItemKind::Files,
+            ..Default::default()
+        }));
         h.push("aaa".into()); // même contenu mais texte : élément distinct
         assert_eq!(h.len(), 3);
         assert!(h.push_item(img("aaa"))); // doublon : remonte
@@ -522,9 +546,16 @@ mod tests {
         for i in 0..MAX_IMAGES + 5 {
             h.push_item(img(&format!("h{i}")));
         }
-        let images = h.items().iter().filter(|i| i.kind == ItemKind::Image).count();
+        let images = h
+            .items()
+            .iter()
+            .filter(|i| i.kind == ItemKind::Image)
+            .count();
         assert_eq!(images, MAX_IMAGES, "au plus {MAX_IMAGES} images");
-        assert!(h.items().iter().any(|i| i.kind == ItemKind::Files), "le reste est conservé");
+        assert!(
+            h.items().iter().any(|i| i.kind == ItemKind::Files),
+            "le reste est conservé"
+        );
         assert_eq!(h.items()[0].text, format!("h{}", MAX_IMAGES + 4));
     }
 
@@ -534,22 +565,46 @@ mod tests {
         for i in 0..20 {
             h.push(format!("t{i}"));
         }
-        let img = |x: &str| Item { text: x.into(), kind: ItemKind::Image, ..Default::default() };
+        let img = |x: &str| Item {
+            text: x.into(),
+            kind: ItemKind::Image,
+            ..Default::default()
+        };
         h.push_item(img("i1"));
         h.push_item(img("i2"));
         let now = now_secs();
-        let small = Limits { max_items: 10, max_images: 1, ..Limits::default() };
-        assert_eq!(h.would_remove(small, now), 12, "aperçu : 22 → 10 (dont 1 image)");
+        let small = Limits {
+            max_items: 10,
+            max_images: 1,
+            ..Limits::default()
+        };
+        assert_eq!(
+            h.would_remove(small, now),
+            12,
+            "aperçu : 22 → 10 (dont 1 image)"
+        );
         assert_eq!(h.len(), 22, "l'aperçu ne supprime rien");
         assert_eq!(h.set_limits(small, now), 12);
         assert_eq!(h.len(), 10);
-        assert_eq!(h.items().iter().filter(|i| i.kind == ItemKind::Image).count(), 1);
+        assert_eq!(
+            h.items()
+                .iter()
+                .filter(|i| i.kind == ItemKind::Image)
+                .count(),
+            1
+        );
         assert_eq!(h.items()[0].text, "i2", "les plus récents sont gardés");
         // Nouvelle limite appliquée aux ajouts suivants.
         h.push("nouveau".into());
         assert_eq!(h.len(), 10);
         // Taille de texte.
-        h.set_limits(Limits { max_text_bytes: 5, ..small }, now);
+        h.set_limits(
+            Limits {
+                max_text_bytes: 5,
+                ..small
+            },
+            now,
+        );
         assert!(!h.push("123456".into()));
         assert!(h.push("12345".into()));
     }
@@ -562,7 +617,10 @@ mod tests {
         // Vieillir « ancien » de 40 jours.
         let now = now_secs();
         h.items[0].copied_at = now - 40 * 86_400;
-        let month = Limits { retention_days: 30, ..Limits::default() };
+        let month = Limits {
+            retention_days: 30,
+            ..Limits::default()
+        };
         assert_eq!(h.would_remove(month, now), 1);
         assert_eq!(h.set_limits(month, now), 1);
         assert_eq!(h.items()[0].text, "récent");
@@ -604,7 +662,8 @@ mod tests {
         let db = dir.join("h.db");
         let key = crate::crypto::generate_key();
         {
-            let (store, items) = Store::open(db.clone(), None, None, Box::new(move || Ok(key))).unwrap();
+            let (store, items) =
+                Store::open(db.clone(), None, None, Box::new(move || Ok(key))).unwrap();
             let mut h = History::with_store(store.clone(), items);
             h.push("un".into());
             h.push("deux".into());

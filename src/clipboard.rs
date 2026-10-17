@@ -6,11 +6,11 @@
 //! par les gestionnaires de mots de passe sont ignorées sans être lues.
 
 use crate::history::{History, Item, ItemKind};
-use crate::media;
 use crate::logging::LockExt;
+use crate::media;
 use crate::pasteboard::{self, Payload};
 use eframe::egui;
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -74,6 +74,8 @@ pub struct Shared {
     pub own_change: Arc<AtomicIsize>,
     /// Taille maximale d'une image (pixels).
     pub max_image_pixels: Arc<AtomicU64>,
+    /// Nombre maximal d'images gardées : à 0, les images ne sont même pas lues.
+    pub max_images: Arc<AtomicUsize>,
 }
 
 impl Shared {
@@ -85,6 +87,7 @@ impl Shared {
             save_images: Arc::new(AtomicBool::new(save_images)),
             own_change: Arc::new(AtomicIsize::new(isize::MIN)),
             max_image_pixels: Arc::new(AtomicU64::new(media::MAX_PIXELS)),
+            max_images: Arc::new(AtomicUsize::new(crate::history::MAX_IMAGES)),
         }
     }
 
@@ -94,6 +97,11 @@ impl Shared {
             self.own_change.store(c, Ordering::Relaxed);
         }
     }
+}
+
+/// Faut-il lire et enregistrer les images copiées ?
+fn images_wanted(shared: &Shared) -> bool {
+    shared.save_images.load(Ordering::Relaxed) && shared.max_images.load(Ordering::Relaxed) > 0
 }
 
 pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Context) {
@@ -163,14 +171,22 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                         }
                     }
                     Payload::Image if !sensitive => {
-                        if !shared.save_images.load(Ordering::Relaxed) {
-                            log::info!("Copie ignorée (image, réglage désactivé)");
+                        if !images_wanted(&shared) {
+                            log::info!("Copie ignorée (image : désactivé ou limite à 0)");
                             continue;
                         }
-                        let Ok(img) = clipboard.get_image() else { continue };
+                        let Ok(img) = clipboard.get_image() else {
+                            continue;
+                        };
                         let (w, h) = (img.width as u32, img.height as u32);
                         let max = shared.max_image_pixels.load(Ordering::Relaxed);
-                        match media::save_rgba_limited(&images_dir, w, h, img.bytes.into_owned(), max) {
+                        match media::save_rgba_limited(
+                            &images_dir,
+                            w,
+                            h,
+                            img.bytes.into_owned(),
+                            max,
+                        ) {
                             Ok(saved) => {
                                 log::info!("image copiée : {}", saved.meta);
                                 Item {
@@ -188,7 +204,9 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                     }
                     _ => {
                         // Erreur = contenu non textuel inconnu : ignoré.
-                        let Ok(text) = clipboard.get_text() else { continue };
+                        let Ok(text) = clipboard.get_text() else {
+                            continue;
+                        };
                         if count.is_none() {
                             if last_text.as_deref() == Some(text.as_str()) {
                                 continue;
@@ -207,7 +225,11 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                         if sensitive {
                             log::info!(
                                 "Mot de passe enregistré ({}), chiffré et affiché masqué",
-                                if probable { "détecté" } else { "marqué confidentiel" }
+                                if probable {
+                                    "détecté"
+                                } else {
+                                    "marqué confidentiel"
+                                }
                             );
                         }
                         Item::text(text, 0, sensitive)
@@ -226,10 +248,13 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
 /// Remet un élément dans le presse-papiers (texte, image ou fichiers).
 pub fn write_item(clipboard: &mut arboard::Clipboard, item: &Item) -> Result<(), String> {
     match item.kind {
-        ItemKind::Text => clipboard.set_text(item.text.clone()).map_err(|e| e.to_string()),
+        ItemKind::Text => clipboard
+            .set_text(item.text.clone())
+            .map_err(|e| e.to_string()),
         ItemKind::Image => {
             let path = media::full_path(&media::images_dir(), &item.text);
-            let (w, h, rgba) = media::load_rgba(&path).map_err(|_| "image introuvable".to_string())?;
+            let (w, h, rgba) =
+                media::load_rgba(&path).map_err(|_| "image introuvable".to_string())?;
             clipboard
                 .set_image(arboard::ImageData {
                     width: w as usize,
@@ -263,15 +288,25 @@ pub fn media_selftest() -> i32 {
         }
     };
     let dir = std::env::temp_dir().join(format!("copyq-rs-media-selftest-{}", std::process::id()));
-    let px: Vec<u8> = (0..64 * 32).flat_map(|i| [(i % 256) as u8, 80, 160, 255]).collect();
+    let px: Vec<u8> = (0..64 * 32)
+        .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
+        .collect();
     let saved = media::save_rgba(&dir, 64, 32, px).expect("image de test");
 
     // Recopie d'image : on lit directement le fichier enregistré.
-    let img = Item { text: saved.hash.clone(), kind: ItemKind::Image, ..Default::default() };
+    let img = Item {
+        text: saved.hash.clone(),
+        kind: ItemKind::Image,
+        ..Default::default()
+    };
     let path = media::full_path(&dir, &saved.hash);
     let (w, h, rgba) = media::load_rgba(&path).unwrap();
     let wrote = cb
-        .set_image(arboard::ImageData { width: w as usize, height: h as usize, bytes: rgba.into() })
+        .set_image(arboard::ImageData {
+            width: w as usize,
+            height: h as usize,
+            bytes: rgba.into(),
+        })
         .is_ok();
     let types = pasteboard::types();
     let payload = pasteboard::classify_payload(&types);
@@ -285,11 +320,16 @@ pub fn media_selftest() -> i32 {
     let wrote = pasteboard::write_file_paths(&files);
     let types = pasteboard::types();
     let back = pasteboard::file_paths();
-    println!("fichiers : écrits={wrote} → {:?}, relus {back:?}", pasteboard::classify_payload(&types));
+    println!(
+        "fichiers : écrits={wrote} → {:?}, relus {back:?}",
+        pasteboard::classify_payload(&types)
+    );
     let canon = |v: &[std::path::PathBuf]| -> Vec<_> {
         v.iter().filter_map(|p| p.canonicalize().ok()).collect()
     };
-    ok &= wrote && pasteboard::classify_payload(&types) == Payload::Files && canon(&back) == canon(&files);
+    ok &= wrote
+        && pasteboard::classify_payload(&types) == Payload::Files
+        && canon(&back) == canon(&files);
 
     let _ = std::fs::remove_dir_all(dir);
     println!("{}", if ok { "SUCCÈS" } else { "ÉCHEC" });
@@ -300,6 +340,20 @@ pub fn media_selftest() -> i32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn images_are_skipped_when_disabled_or_limit_is_zero() {
+        let shared = Shared::new(false, true, true);
+        assert!(images_wanted(&shared));
+        shared.max_images.store(0, Ordering::Relaxed);
+        assert!(
+            !images_wanted(&shared),
+            "limite à 0 : l'image n'est ni lue ni encodée"
+        );
+        shared.max_images.store(5, Ordering::Relaxed);
+        shared.save_images.store(false, Ordering::Relaxed);
+        assert!(!images_wanted(&shared));
+    }
+
     fn plain() -> Vec<String> {
         vec!["public.utf8-plain-text".into()]
     }
@@ -307,30 +361,47 @@ mod tests {
     #[test]
     fn unchanged_counter_does_nothing() {
         let mut last = Some(5);
-        assert_eq!(classify(&mut last, Some(5), false, false, plain), Change::None);
+        assert_eq!(
+            classify(&mut last, Some(5), false, false, plain),
+            Change::None
+        );
     }
 
     #[test]
     fn new_counter_reads() {
         let mut last = Some(5);
-        assert_eq!(classify(&mut last, Some(6), false, false, plain), Change::Read { sensitive: false });
+        assert_eq!(
+            classify(&mut last, Some(6), false, false, plain),
+            Change::Read { sensitive: false }
+        );
         assert_eq!(last, Some(6));
-        assert_eq!(classify(&mut last, Some(6), false, false, plain), Change::None);
+        assert_eq!(
+            classify(&mut last, Some(6), false, false, plain),
+            Change::None
+        );
     }
 
     #[test]
     fn concealed_is_skipped_and_not_reread() {
         let mut last = Some(1);
         let secret = || vec!["org.nspasteboard.ConcealedType".to_string()];
-        assert!(matches!(classify(&mut last, Some(2), false, false, secret), Change::Skip(_)));
+        assert!(matches!(
+            classify(&mut last, Some(2), false, false, secret),
+            Change::Skip(_)
+        ));
         // Le compteur a été mémorisé : on ne retente pas sur le même contenu.
-        assert_eq!(classify(&mut last, Some(2), false, false, plain), Change::None);
+        assert_eq!(
+            classify(&mut last, Some(2), false, false, plain),
+            Change::None
+        );
     }
 
     #[test]
     fn pause_skips_without_reading_types() {
         let mut last = Some(1);
-        let r = classify(&mut last, Some(2), true, false, || panic!("types lus pendant la pause"));
+        let r = classify(&mut last, Some(2), true, false, || {
+            panic!("types lus pendant la pause")
+        });
         assert_eq!(r, Change::Skip("pause"));
     }
 
@@ -338,10 +409,16 @@ mod tests {
     fn cleared_but_not_yet_written_is_retried() {
         let mut last = Some(1);
         // L'app source vient de vider le presse-papiers : rien à lire encore.
-        assert_eq!(classify(&mut last, Some(2), false, false, Vec::new), Change::None);
+        assert_eq!(
+            classify(&mut last, Some(2), false, false, Vec::new),
+            Change::None
+        );
         assert_eq!(last, Some(1), "le compteur ne doit pas être mémorisé");
         // Le contenu est écrit (même compteur) : on le lit bien.
-        assert_eq!(classify(&mut last, Some(2), false, false, plain), Change::Read { sensitive: false });
+        assert_eq!(
+            classify(&mut last, Some(2), false, false, plain),
+            Change::Read { sensitive: false }
+        );
         assert_eq!(last, Some(2));
     }
 
@@ -358,6 +435,9 @@ mod tests {
     #[test]
     fn without_counter_always_reads() {
         let mut last = None;
-        assert_eq!(classify(&mut last, None, false, false, plain), Change::Read { sensitive: false });
+        assert_eq!(
+            classify(&mut last, None, false, false, plain),
+            Change::Read { sensitive: false }
+        );
     }
 }

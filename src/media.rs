@@ -103,10 +103,19 @@ pub fn load_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((rgba.width(), rgba.height(), rgba.into_raw()))
 }
 
+/// Supprime un fichier ; l'absence n'est pas une erreur, le reste est journalisé.
+fn remove_file_logged(path: &Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("suppression de {} impossible : {e}", path.display()),
+    }
+}
+
 /// Supprime l'image et sa vignette.
 pub fn remove(dir: &Path, hash: &str) {
-    let _ = std::fs::remove_file(full_path(dir, hash));
-    let _ = std::fs::remove_file(thumb_path(dir, hash));
+    remove_file_logged(&full_path(dir, hash));
+    remove_file_logged(&thumb_path(dir, hash));
 }
 
 /// Supprime toutes les images.
@@ -114,7 +123,7 @@ pub fn remove_all(dir: &Path) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for e in entries.flatten() {
             if e.path().extension().is_some_and(|x| x == "png") {
-                let _ = std::fs::remove_file(e.path());
+                remove_file_logged(&e.path());
             }
         }
     }
@@ -140,7 +149,13 @@ mod tests {
 
     fn checker(w: u32, h: u32) -> Vec<u8> {
         (0..w * h)
-            .flat_map(|i| if (i % w + i / w) % 2 == 0 { [255, 0, 0, 255] } else { [0, 0, 255, 255] })
+            .flat_map(|i| {
+                if (i % w + i / w).is_multiple_of(2) {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
             .collect()
     }
 
@@ -171,7 +186,10 @@ mod tests {
         let dir = temp("reject");
         assert!(save_rgba(&dir, 0, 10, vec![]).is_err());
         assert!(save_rgba(&dir, 100_000, 100_000, vec![]).is_err());
-        assert!(save_rgba(&dir, 2, 2, vec![0; 3]).is_err(), "taille incohérente");
+        assert!(
+            save_rgba(&dir, 2, 2, vec![0; 3]).is_err(),
+            "taille incohérente"
+        );
     }
 
     #[test]

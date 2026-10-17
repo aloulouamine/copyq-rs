@@ -124,7 +124,9 @@ mod imp {
                 return Vec::new();
             }
             let items: *mut AnyObject = msg_send![pb, pasteboardItems];
-            let Some(file_url) = ns_string("public.file-url") else { return Vec::new() };
+            let Some(file_url) = ns_string("public.file-url") else {
+                return Vec::new();
+            };
             if items.is_null() {
                 return Vec::new();
             }
@@ -160,7 +162,9 @@ mod imp {
             }
             let array: *mut AnyObject = msg_send![class!(NSMutableArray), array];
             for p in paths {
-                let Some(s) = p.to_str().and_then(|s| ns_string(s)) else { continue };
+                let Some(s) = p.to_str().and_then(|s| ns_string(s)) else {
+                    continue;
+                };
                 let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: s];
                 if !url.is_null() {
                     let _: () = msg_send![array, addObject: url];
@@ -242,7 +246,10 @@ mod tests {
 
     #[test]
     fn ignores_password_manager_types() {
-        assert!(should_ignore(&v(&["public.utf8-plain-text", "org.nspasteboard.ConcealedType"])));
+        assert!(should_ignore(&v(&[
+            "public.utf8-plain-text",
+            "org.nspasteboard.ConcealedType"
+        ])));
         assert!(should_ignore(&v(&["com.agilebits.onepassword"])));
         assert!(should_ignore(&v(&["org.nspasteboard.TransientType"])));
     }
@@ -287,7 +294,12 @@ mod tests {
     #[test]
     fn classifies_payloads() {
         // Capture d'écran (journal réel).
-        let shot = v(&["public.png", "Apple PNG pasteboard type", "public.tiff", "NeXT TIFF v4.0 pasteboard type"]);
+        let shot = v(&[
+            "public.png",
+            "Apple PNG pasteboard type",
+            "public.tiff",
+            "NeXT TIFF v4.0 pasteboard type",
+        ]);
         assert_eq!(classify_payload(&shot), Payload::Image);
         // Fichier copié dans le Finder : URL + nom + icône.
         let finder = v(&["public.file-url", "public.utf8-plain-text", "public.tiff"]);
@@ -295,13 +307,19 @@ mod tests {
         // Texte riche avec aperçu image (Pages, Word…) : reste du texte.
         let rich = v(&["public.rtf", "public.utf8-plain-text", "public.tiff"]);
         assert_eq!(classify_payload(&rich), Payload::Text);
-        assert_eq!(classify_payload(&v(&["public.utf8-plain-text"])), Payload::Text);
+        assert_eq!(
+            classify_payload(&v(&["public.utf8-plain-text"])),
+            Payload::Text
+        );
         assert_eq!(classify_payload(&[]), Payload::Text);
     }
 
     #[test]
     fn keeps_regular_text() {
-        assert!(!should_ignore(&v(&["public.utf8-plain-text", "NSStringPboardType"])));
+        assert!(!should_ignore(&v(&[
+            "public.utf8-plain-text",
+            "NSStringPboardType"
+        ])));
         assert!(!should_ignore(&[]));
     }
 }

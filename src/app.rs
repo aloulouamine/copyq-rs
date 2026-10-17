@@ -9,11 +9,11 @@ use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
 };
-use std::collections::HashMap;
-use unicode_normalization::UnicodeNormalization;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use unicode_normalization::UnicodeNormalization;
 
 const PREVIEW_CHARS: usize = 160;
 const TOOLTIP_CHARS: usize = 1_500;
@@ -213,7 +213,11 @@ impl CopyApp {
                         } else {
                             history::preview(&it.text, PREVIEW_CHARS)
                         },
-                        kind: if it.sensitive { Kind::Secret } else { Kind::detect(&it.text) },
+                        kind: if it.sensitive {
+                            Kind::Secret
+                        } else {
+                            Kind::detect(&it.text)
+                        },
                         sensitive: it.sensitive,
                         copied_at: it.copied_at,
                         lines: it.text.trim().lines().count().max(1),
@@ -252,7 +256,7 @@ impl CopyApp {
                             let parent = paths
                                 .first()
                                 .and_then(|p| p.parent())
-                                .map(|d| shorten_home(d))
+                                .map(shorten_home)
                                 .unwrap_or_default();
                             let missing = !paths.iter().all(|p| p.exists());
                             row.detail = if missing {
@@ -319,11 +323,28 @@ impl CopyApp {
 
     fn delete_item(&mut self, index: usize) {
         self.history.lock_safe().remove(index);
+        self.prune_thumbs();
     }
 
     fn clear_all(&mut self) {
         self.history.lock_safe().clear();
         self.selected = 0;
+        self.prune_thumbs();
+    }
+
+    /// Libère les textures des vignettes dont l'image n'est plus dans l'historique.
+    fn prune_thumbs(&mut self) {
+        if self.thumbs.is_empty() {
+            return;
+        }
+        let history = self.history.lock_safe();
+        let live = image_hashes(&history);
+        let before = self.thumbs.len();
+        self.thumbs.retain(|hash, _| live.contains(hash.as_str()));
+        drop(history);
+        if self.thumbs.len() < before {
+            log::debug!("{} vignette(s) libérée(s)", before - self.thumbs.len());
+        }
     }
 
     /// Contenu du panneau « Réglages ».
@@ -333,13 +354,22 @@ impl CopyApp {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Réglages").size(13.5).color(p.text).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                for (tab, label) in [(SettingsTab::Limits, "Limites"), (SettingsTab::General, "Général")] {
+                for (tab, label) in [
+                    (SettingsTab::Limits, "Limites"),
+                    (SettingsTab::General, "Général"),
+                ] {
                     let active = self.settings_tab == tab;
-                    let text = RichText::new(label)
-                        .size(12.5)
-                        .color(if active { p.accent } else { p.text_muted });
+                    let text = RichText::new(label).size(12.5).color(if active {
+                        p.accent
+                    } else {
+                        p.text_muted
+                    });
                     let button = egui::Button::new(text)
-                        .fill(if active { p.accent_soft } else { Color32::TRANSPARENT })
+                        .fill(if active {
+                            p.accent_soft
+                        } else {
+                            Color32::TRANSPARENT
+                        })
                         .rounding(6.0);
                     if ui.add(button).clicked() {
                         self.settings_tab = tab;
@@ -360,14 +390,21 @@ impl CopyApp {
     /// Onglet « Limites » : on modifie un brouillon, appliqué sur demande
     /// (réduire une limite supprime des éléments).
     fn limits_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
-        let mut draft = self.limits_draft.take().unwrap_or_else(|| self.settings.clone());
+        let mut draft = self
+            .limits_draft
+            .take()
+            .unwrap_or_else(|| self.settings.clone());
         let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(label).size(12.5).color(p.text));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Champs bien visibles : cadre, largeur minimale.
                     let v = ui.visuals_mut();
-                    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active] {
+                    for w in [
+                        &mut v.widgets.inactive,
+                        &mut v.widgets.hovered,
+                        &mut v.widgets.active,
+                    ] {
                         w.bg_stroke = Stroke::new(1.0_f32, p.border);
                     }
                     v.widgets.inactive.bg_fill = p.bg;
@@ -379,45 +416,70 @@ impl CopyApp {
             caption(ui, help, p);
             ui.add_space(6.0);
         };
-        row(ui, "Nombre d'éléments", "Au-delà, les plus anciens sont supprimés.", &mut |ui| {
-            ui.add(
-                egui::DragValue::new(&mut draft.max_items)
-                    .range(settings::ITEMS_RANGE)
-                    .speed(5.0),
-            );
-        });
-        row(ui, "Nombre d'images", "Comptées dans le total ; 0 = aucune image gardée.", &mut |ui| {
-            ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
-        });
-        row(ui, "Taille d'un texte", "Un texte plus long est ignoré.", &mut |ui| {
-            ui.add(
-                egui::DragValue::new(&mut draft.max_text_kb)
-                    .range(settings::TEXT_KB_RANGE)
-                    .speed(10.0)
-                    .suffix(" Ko"),
-            );
-        });
-        row(ui, "Taille d'une image", "Une image plus grande est ignorée.", &mut |ui| {
-            ui.add(
-                egui::DragValue::new(&mut draft.max_image_mp)
-                    .range(settings::IMAGE_MP_RANGE)
-                    .suffix(" Mpx"),
-            );
-        });
-        row(ui, "Conservation", "Les éléments plus anciens sont effacés automatiquement.", &mut |ui| {
-            let current = settings::RETENTION_CHOICES
-                .iter()
-                .find(|(d, _)| *d == draft.retention_days)
-                .map(|(_, l)| l.to_string())
-                .unwrap_or_else(|| format!("{} jours", draft.retention_days));
-            egui::ComboBox::from_id_salt("retention")
-                .selected_text(current)
-                .show_ui(ui, |ui| {
-                    for (days, label) in settings::RETENTION_CHOICES {
-                        ui.selectable_value(&mut draft.retention_days, days, label);
-                    }
-                });
-        });
+        row(
+            ui,
+            "Nombre d'éléments",
+            "Au-delà, les plus anciens sont supprimés.",
+            &mut |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut draft.max_items)
+                        .range(settings::ITEMS_RANGE)
+                        .speed(5.0),
+                );
+            },
+        );
+        row(
+            ui,
+            "Nombre d'images",
+            "Comptées dans le total ; 0 = aucune image gardée.",
+            &mut |ui| {
+                ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
+            },
+        );
+        row(
+            ui,
+            "Taille d'un texte",
+            "Un texte plus long est ignoré.",
+            &mut |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut draft.max_text_kb)
+                        .range(settings::TEXT_KB_RANGE)
+                        .speed(10.0)
+                        .suffix(" Ko"),
+                );
+            },
+        );
+        row(
+            ui,
+            "Taille d'une image",
+            "Une image plus grande est ignorée.",
+            &mut |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut draft.max_image_mp)
+                        .range(settings::IMAGE_MP_RANGE)
+                        .suffix(" Mpx"),
+                );
+            },
+        );
+        row(
+            ui,
+            "Conservation",
+            "Les éléments plus anciens sont effacés automatiquement.",
+            &mut |ui| {
+                let current = settings::RETENTION_CHOICES
+                    .iter()
+                    .find(|(d, _)| *d == draft.retention_days)
+                    .map(|(_, l)| l.to_string())
+                    .unwrap_or_else(|| format!("{} jours", draft.retention_days));
+                egui::ComboBox::from_id_salt("retention")
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        for (days, label) in settings::RETENTION_CHOICES {
+                            ui.selectable_value(&mut draft.retention_days, days, label);
+                        }
+                    });
+            },
+        );
 
         let mut changed = false;
         let pending = draft != self.settings;
@@ -471,12 +533,16 @@ impl CopyApp {
         self.shared
             .max_image_pixels
             .store(self.settings.max_image_pixels(), Ordering::Relaxed);
+        self.shared
+            .max_images
+            .store(self.settings.max_images, Ordering::Relaxed);
         let removed = self
             .history
             .lock_safe()
             .set_limits(self.settings.limits(), history::now_secs());
         if removed > 0 {
             log::info!("limites appliquées : {removed} élément(s) supprimé(s)");
+            self.prune_thumbs();
         }
         removed
     }
@@ -485,7 +551,14 @@ impl CopyApp {
     fn general_settings_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
         let mut changed = false;
         ui.horizontal(|ui| {
-            if toggle(ui, &mut self.settings.auto_paste, "Coller automatiquement", p).changed() {
+            if toggle(
+                ui,
+                &mut self.settings.auto_paste,
+                "Coller automatiquement",
+                p,
+            )
+            .changed()
+            {
                 changed = true;
                 if self.settings.auto_paste && !paste::is_trusted() {
                     paste::request_trust();
@@ -513,15 +586,31 @@ impl CopyApp {
         ui.add_space(8.0);
         if !self.settings.auto_paste {
             ui.horizontal(|ui| {
-                changed |= toggle(ui, &mut self.settings.hide_after_copy, "Masquer après copie", p)
-                    .changed();
+                changed |= toggle(
+                    ui,
+                    &mut self.settings.hide_after_copy,
+                    "Masquer après copie",
+                    p,
+                )
+                .changed();
             });
-            caption(ui, "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.", p);
+            caption(
+                ui,
+                "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.",
+                p,
+            );
             ui.add_space(8.0);
         }
 
         ui.horizontal(|ui| {
-            if toggle(ui, &mut self.settings.save_images, "Enregistrer les images", p).changed() {
+            if toggle(
+                ui,
+                &mut self.settings.save_images,
+                "Enregistrer les images",
+                p,
+            )
+            .changed()
+            {
                 changed = true;
                 self.shared
                     .save_images
@@ -543,7 +632,8 @@ impl CopyApp {
         );
         let resp = ui
             .add_enabled_ui(available, |ui| {
-                ui.horizontal(|ui| toggle(ui, &mut on, "Ouvrir au démarrage", p)).inner
+                ui.horizontal(|ui| toggle(ui, &mut on, "Ouvrir au démarrage", p))
+                    .inner
             })
             .inner;
         if available && resp.changed() {
@@ -561,14 +651,22 @@ impl CopyApp {
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
-            if toggle(ui, &mut self.settings.save_passwords, "Enregistrer les mots de passe", p)
-                .changed()
+            if toggle(
+                ui,
+                &mut self.settings.save_passwords,
+                "Enregistrer les mots de passe",
+                p,
+            )
+            .changed()
             {
                 changed = true;
                 self.shared
                     .save_passwords
                     .store(self.settings.save_passwords, Ordering::Relaxed);
-                log::info!("enregistrement des mots de passe : {}", self.settings.save_passwords);
+                log::info!(
+                    "enregistrement des mots de passe : {}",
+                    self.settings.save_passwords
+                );
             }
         });
         caption(
@@ -580,14 +678,22 @@ impl CopyApp {
         );
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if toggle(ui, &mut self.settings.detect_passwords, "Détecter les mots de passe", p)
-                .changed()
+            if toggle(
+                ui,
+                &mut self.settings.detect_passwords,
+                "Détecter les mots de passe",
+                p,
+            )
+            .changed()
             {
                 changed = true;
                 self.shared
                     .detect_passwords
                     .store(self.settings.detect_passwords, Ordering::Relaxed);
-                log::info!("détection des mots de passe : {}", self.settings.detect_passwords);
+                log::info!(
+                    "détection des mots de passe : {}",
+                    self.settings.detect_passwords
+                );
             }
         });
         caption(
@@ -633,7 +739,9 @@ impl CopyApp {
     fn toggle_sensitive(&mut self, index: usize) {
         let now_sensitive = {
             let mut h = self.history.lock_safe();
-            let Some(current) = h.items().get(index).map(|it| it.sensitive) else { return };
+            let Some(current) = h.items().get(index).map(|it| it.sensitive) else {
+                return;
+            };
             h.set_sensitive(index, !current);
             !current
         };
@@ -651,7 +759,11 @@ impl CopyApp {
             .lock_safe()
             .reclassify_probable_passwords(self.settings.save_passwords);
         if n > 0 {
-            let what = if self.settings.save_passwords { "chiffré(s) et masqué(s)" } else { "supprimé(s)" };
+            let what = if self.settings.save_passwords {
+                "chiffré(s) et masqué(s)"
+            } else {
+                "supprimé(s)"
+            };
             log::info!("{n} mot(s) de passe probable(s) déjà enregistré(s) : {what}");
             self.notify(format!("{n} mot(s) de passe probable(s) {what}"));
         }
@@ -662,9 +774,9 @@ impl CopyApp {
             Ok(()) => {
                 self.login_status = login_item::status();
                 match self.login_status {
-                    login_item::Status::RequiresApproval => self.notify_error(
-                        "À valider dans Réglages → Général → Ouverture",
-                    ),
+                    login_item::Status::RequiresApproval => {
+                        self.notify_error("À valider dans Réglages → Général → Ouverture")
+                    }
                     login_item::Status::Enabled => self.notify("Ouverture au démarrage activée"),
                     _ => self.notify("Ouverture au démarrage désactivée"),
                 }
@@ -697,13 +809,17 @@ impl CopyApp {
 
 impl eframe::App for CopyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Durée de conservation : vérifiée toutes les minutes.
-        if self.settings.retention_days > 0 && self.last_expire.elapsed() > Duration::from_secs(60) {
+        // Toutes les minutes : durée de conservation, puis vignettes devenues inutiles
+        // (images évincées par de nouvelles copies dans le fil de surveillance).
+        if self.last_expire.elapsed() > Duration::from_secs(60) {
             self.last_expire = Instant::now();
-            let n = self.history.lock_safe().expire(history::now_secs());
-            if n > 0 {
-                log::info!("{n} élément(s) expiré(s)");
+            if self.settings.retention_days > 0 {
+                let n = self.history.lock_safe().expire(history::now_secs());
+                if n > 0 {
+                    log::info!("{n} élément(s) expiré(s)");
+                }
             }
+            self.prune_thumbs();
         }
         // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
         if std::mem::take(&mut self.open_settings_on_start) {
@@ -892,7 +1008,14 @@ impl eframe::App for CopyApp {
                     for (key, label) in [
                         ("⌘⇧Z", "ouvrir"),
                         ("↑↓", "naviguer"),
-                        ("entrée", if self.settings.auto_paste { "coller" } else { "copier" }),
+                        (
+                            "entrée",
+                            if self.settings.auto_paste {
+                                "coller"
+                            } else {
+                                "copier"
+                            },
+                        ),
                         ("⌘⌫", "supprimer"),
                         ("esc", "fermer"),
                     ] {
@@ -905,7 +1028,11 @@ impl eframe::App for CopyApp {
 
         // ── Liste ──────────────────────────────────────────────────────────
         egui::CentralPanel::default()
-            .frame(Frame::none().fill(p.bg).inner_margin(Margin::symmetric(8.0, 0.0)))
+            .frame(
+                Frame::none()
+                    .fill(p.bg)
+                    .inner_margin(Margin::symmetric(8.0, 0.0)),
+            )
             .show(ctx, |ui| {
                 if rows.is_empty() {
                     empty_state(ui, total == 0, &self.query, &p);
@@ -997,7 +1124,11 @@ impl CopyApp {
                     .inner_margin(Margin::symmetric(14.0, 7.0))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("●").size(10.0).color(dot.gamma_multiply(alpha)));
+                            ui.label(
+                                RichText::new("●")
+                                    .size(10.0)
+                                    .color(dot.gamma_multiply(alpha)),
+                            );
                             ui.label(
                                 RichText::new(toast.message.as_str())
                                     .size(13.0)
@@ -1035,8 +1166,10 @@ fn row_ui(
     hist: &Mutex<History>,
     p: &Palette,
 ) -> RowAction {
-    let (rect, resp) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), row_height(row)), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), row_height(row)),
+        Sense::click(),
+    );
     if selected && scroll_to_selected {
         resp.scroll_to_me(None);
     }
@@ -1074,7 +1207,9 @@ fn row_ui(
             egui::vec2(96.0, 60.0),
         );
         let [w, h] = tex.size();
-        let scale = (frame.width() / w as f32).min(frame.height() / h as f32).min(1.0);
+        let scale = (frame.width() / w as f32)
+            .min(frame.height() / h as f32)
+            .min(1.0);
         let img = Rect::from_center_size(frame.center(), egui::vec2(w as f32, h as f32) * scale);
         painter.rect_filled(frame, 6.0, p.surface_hover);
         painter.image(
@@ -1086,10 +1221,17 @@ fn row_ui(
         painter.rect_stroke(frame, 6.0, Stroke::new(1.0_f32, p.border));
         frame.right() + 12.0
     } else {
-        painter.rect_filled(tile, 8.0, if selected { p.surface } else { p.surface_hover });
+        painter.rect_filled(
+            tile,
+            8.0,
+            if selected { p.surface } else { p.surface_hover },
+        );
         painter.rect_stroke(tile, 8.0, Stroke::new(1.0_f32, p.border));
-        row.kind
-            .paint(&painter, tile.center(), if selected { p.accent } else { p.text_muted });
+        row.kind.paint(
+            &painter,
+            tile.center(),
+            if selected { p.accent } else { p.text_muted },
+        );
         tile.right() + 12.0
     };
 
@@ -1123,21 +1265,26 @@ fn row_ui(
         icons::trash(
             &painter,
             action_rect.center(),
-            if del.hovered() { p.danger } else { p.text_faint },
+            if del.hovered() {
+                p.danger
+            } else {
+                p.text_faint
+            },
         );
         if del.clicked() {
             action = RowAction::Delete;
         }
 
         let lock_rect = action_rect.translate(egui::vec2(-30.0, 0.0));
-        let lock = (row.item_kind == ItemKind::Text).then(|| ui
-            .interact(lock_rect, resp.id.with("lock"), Sense::click())
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text(if row.sensitive {
-                "Ce n'est pas un mot de passe : afficher en clair (⌘L)"
-            } else {
-                "C'est un mot de passe : chiffrer et masquer (⌘L)"
-            }));
+        let lock = (row.item_kind == ItemKind::Text).then(|| {
+            ui.interact(lock_rect, resp.id.with("lock"), Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .on_hover_text(if row.sensitive {
+                    "Ce n'est pas un mot de passe : afficher en clair (⌘L)"
+                } else {
+                    "C'est un mot de passe : chiffrer et masquer (⌘L)"
+                })
+        });
         if let Some(lock) = lock {
             if lock.hovered() {
                 painter.rect_filled(lock_rect, 7.0, p.accent.gamma_multiply(0.15));
@@ -1145,7 +1292,11 @@ fn row_ui(
             icons::lock(
                 &painter,
                 lock_rect.center(),
-                if lock.hovered() || row.sensitive { p.accent } else { p.text_faint },
+                if lock.hovered() || row.sensitive {
+                    p.accent
+                } else {
+                    p.text_faint
+                },
             );
             if lock.clicked() {
                 action = RowAction::ToggleSensitive;
@@ -1163,7 +1314,10 @@ fn row_ui(
         if let Some(tex) = thumb {
             let [w, h] = tex.size();
             let scale = (420.0 / w as f32).min(320.0 / h as f32).min(1.0);
-            ui.add(egui::Image::new((tex.id(), egui::vec2(w as f32, h as f32) * scale)));
+            ui.add(egui::Image::new((
+                tex.id(),
+                egui::vec2(w as f32, h as f32) * scale,
+            )));
             ui.label(RichText::new(&row.detail).size(11.5));
             return;
         }
@@ -1186,6 +1340,16 @@ fn row_height(row: &Row) -> f32 {
 }
 
 /// Charge la vignette d'une image enregistrée en texture egui.
+/// Empreintes des images encore présentes dans l'historique.
+fn image_hashes(history: &History) -> HashSet<&str> {
+    history
+        .items()
+        .iter()
+        .filter(|i| i.kind == ItemKind::Image)
+        .map(|i| i.text.as_str())
+        .collect()
+}
+
 fn load_thumbnail(ctx: &egui::Context, hash: &str) -> Option<egui::TextureHandle> {
     let path = media::thumb_path(&media::images_dir(), hash);
     match media::load_rgba(&path) {
@@ -1218,10 +1382,17 @@ fn shorten_home(dir: &std::path::Path) -> String {
 fn meta_text(row: &Row, now: u64) -> String {
     if row.item_kind != ItemKind::Text {
         let when = history::relative_time(row.copied_at, now);
-        return if row.detail.is_empty() { when } else { format!("{when}  ·  {}", row.detail) };
+        return if row.detail.is_empty() {
+            when
+        } else {
+            format!("{when}  ·  {}", row.detail)
+        };
     }
     if row.sensitive {
-        return format!("mot de passe  ·  {}", history::relative_time(row.copied_at, now));
+        return format!(
+            "mot de passe  ·  {}",
+            history::relative_time(row.copied_at, now)
+        );
     }
     let mut parts = vec![history::relative_time(row.copied_at, now)];
     if row.lines > 1 {
@@ -1308,7 +1479,8 @@ fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> egui::Respons
     };
     let track = lerp_color(off_color, p.accent, t);
     let radius = rect.height() / 2.0;
-    ui.painter().rect_filled(rect, Rounding::same(radius), track);
+    ui.painter()
+        .rect_filled(rect, Rounding::same(radius), track);
     let x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), t);
     ui.painter()
         .circle_filled(egui::pos2(x, rect.center().y), radius - 2.5, Color32::WHITE);
@@ -1343,4 +1515,31 @@ fn kbd(ui: &mut Ui, key: &str, p: &Palette) {
 fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::history::Item;
+
+    #[test]
+    fn image_hashes_lists_only_images_still_in_history() {
+        let mut h = History::default();
+        let img = |x: &str| Item {
+            text: x.into(),
+            kind: ItemKind::Image,
+            ..Default::default()
+        };
+        h.push_item(img("aaa"));
+        h.push_item(img("bbb"));
+        h.push_item(Item {
+            text: "ccc".into(),
+            ..Default::default()
+        });
+        let live = image_hashes(&h);
+        assert_eq!(live, HashSet::from(["aaa", "bbb"]));
+        let pos = h.items().iter().position(|i| i.text == "aaa").unwrap();
+        h.remove(pos);
+        assert_eq!(image_hashes(&h), HashSet::from(["bbb"]));
+    }
 }
