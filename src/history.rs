@@ -116,6 +116,45 @@ impl History {
         removed
     }
 
+    /// Marque (ou démarque) un élément comme mot de passe : il est alors chiffré
+    /// en base, masqué à l'écran et exclu de la recherche.
+    pub fn set_sensitive(&mut self, index: usize, sensitive: bool) -> bool {
+        let Some(old) = self.items.get(index).cloned() else {
+            return false;
+        };
+        if old.sensitive == sensitive {
+            return false;
+        }
+        self.items[index].sensitive = sensitive;
+        if let Some(store) = &self.store {
+            store.delete(&old);
+            store.upsert(&self.items[index]);
+        }
+        self.version += 1;
+        true
+    }
+
+    /// Applique la détection aux éléments déjà enregistrés (ex. un mot de passe
+    /// Dashlane copié avant cette version) : chiffrés et masqués si `keep`,
+    /// supprimés sinon. Renvoie le nombre d'éléments concernés.
+    pub fn reclassify_probable_passwords(&mut self, keep: bool) -> usize {
+        let targets: Vec<usize> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, it)| !it.sensitive && crate::pasteboard::looks_like_password(&it.text))
+            .map(|(i, _)| i)
+            .collect();
+        for &i in targets.iter().rev() {
+            if keep {
+                self.set_sensitive(i, true);
+            } else {
+                self.remove(i);
+            }
+        }
+        targets.len()
+    }
+
     pub fn sensitive_count(&self) -> usize {
         self.items.iter().filter(|it| it.sensitive).count()
     }
@@ -270,9 +309,36 @@ mod tests {
         assert!(h.items()[0].sensitive);
 
         assert_eq!(h.sensitive_count(), 2);
+        // Démarquer puis remarquer manuellement.
+        assert!(h.set_sensitive(0, false));
+        assert!(!h.items()[0].sensitive);
+        assert!(!h.set_sensitive(0, false), "déjà démarqué");
+        assert!(h.set_sensitive(0, true));
         assert_eq!(h.remove_sensitive(), 2);
         assert_eq!(h.sensitive_count(), 0);
         assert_eq!(h.len(), 1);
+    }
+
+    #[test]
+    fn reclassifies_probable_passwords_already_stored() {
+        let mut h = h();
+        h.push("Xk9#mL2$pQ8!vR".into()); // copié depuis une extension, non marqué
+        h.push("texte ordinaire".into());
+        let mut kept = h_clone(&h);
+        assert_eq!(kept.reclassify_probable_passwords(true), 1);
+        assert_eq!(kept.len(), 2);
+        assert!(kept.items()[1].sensitive);
+        assert_eq!(h.reclassify_probable_passwords(false), 1);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h.items()[0].text, "texte ordinaire");
+    }
+
+    fn h_clone(src: &History) -> History {
+        let mut h = History::default();
+        for it in src.items().iter().rev() {
+            h.push_with(it.text.clone(), it.sensitive);
+        }
+        h
     }
 
     #[test]

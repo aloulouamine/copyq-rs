@@ -20,6 +20,35 @@ pub fn should_ignore(types: &[String]) -> bool {
         .any(|t| IGNORED_TYPES.iter().any(|ignored| t == ignored))
 }
 
+/// Heuristique pour les mots de passe copiés *sans* marqueur confidentiel (extensions
+/// de navigateur : Dashlane, 1Password, Bitwarden…) : un seul « mot » de 8 à 128
+/// caractères mêlant majuscules, minuscules et chiffres, qui n'est ni un lien, ni une
+/// adresse e-mail, ni un chemin. Sans symbole, il faut au moins 12 caractères et
+/// 2 chiffres (pour épargner « Paris2026 » ou « Version2 »).
+pub fn looks_like_password(text: &str) -> bool {
+    let t = text.trim();
+    let len = t.chars().count();
+    if !(8..=128).contains(&len) || t.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let url = t.contains("://") || t.starts_with("www.");
+    let email = t.split_once('@').is_some_and(|(user, domain)| {
+        !user.is_empty() && domain.contains('.') && !domain.ends_with('.')
+    });
+    let path = t.starts_with('/') || t.starts_with("~/") || t.starts_with("./");
+    if url || email || path {
+        return false;
+    }
+    let has_upper = t.chars().any(|c| c.is_uppercase());
+    let has_lower = t.chars().any(|c| c.is_lowercase());
+    let digits = t.chars().filter(|c| c.is_ascii_digit()).count();
+    let has_symbol = t.chars().any(|c| !c.is_alphanumeric());
+    if !(has_upper && has_lower && digits > 0) {
+        return false;
+    }
+    has_symbol || (len >= 12 && digits >= 2)
+}
+
 #[cfg(target_os = "macos")]
 mod imp {
     use objc2::rc::autoreleasepool;
@@ -94,6 +123,43 @@ mod tests {
         assert!(should_ignore(&v(&["public.utf8-plain-text", "org.nspasteboard.ConcealedType"])));
         assert!(should_ignore(&v(&["com.agilebits.onepassword"])));
         assert!(should_ignore(&v(&["org.nspasteboard.TransientType"])));
+    }
+
+    #[test]
+    fn detects_probable_passwords() {
+        for pw in [
+            "Xk9#mL2$pQ8!vR",
+            "hunter2-MotDePasse!",
+            "aB3$efgh",
+            "Tr0ub4dor&3",
+            "qW7kP2xZ9mN4vB8c",
+            "  Zx8!kLm2Qp  ",
+        ] {
+            assert!(looks_like_password(pw), "devrait être détecté : {pw}");
+        }
+    }
+
+    #[test]
+    fn ignores_ordinary_text() {
+        for text in [
+            "texte-e2e-ab12cd34",
+            "https://Example.com/A1b2",
+            "www.Example1.com",
+            "amine@Example1.com",
+            "/Users/Amine/Projet2",
+            "~/Project/Copyq2",
+            "Bonjour Monde 2026",
+            "short1A",
+            "550e8400-e29b-41d4-a716-446655440000",
+            "a3f9c2e1b7d4f00d",
+            "Paris2026",
+            "Version2",
+            "fn main() {",
+            "SELECT * FROM T1;",
+            &"Aa1!".repeat(40),
+        ] {
+            assert!(!looks_like_password(text), "faux positif : {text}");
+        }
     }
 
     #[test]

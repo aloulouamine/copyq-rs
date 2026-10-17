@@ -248,7 +248,7 @@ impl Db {
 
     async fn rows(&self) -> Result<Vec<Row>, String> {
         let sql = format!(
-            "SELECT id, text, copied_at, sensitive FROM items ORDER BY id DESC LIMIT {LOAD_LIMIT}"
+            "SELECT id, text, copied_at, sensitive FROM items ORDER BY copied_at DESC, id DESC LIMIT {LOAD_LIMIT}"
         );
         let mut rows = self.conn.query(&sql, ()).await.map_err(|e| e.to_string())?;
         let mut out = Vec::new();

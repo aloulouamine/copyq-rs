@@ -11,6 +11,9 @@ pub struct Settings {
     /// Enregistrer aussi les copies marquées confidentielles (mots de passe).
     /// Désactivé par défaut : c'est le choix le plus sûr.
     pub save_passwords: bool,
+    /// Traiter comme mots de passe les textes qui en ont l'apparence (copies
+    /// d'extensions de navigateur, qui ne sont pas marquées confidentielles).
+    pub detect_passwords: bool,
     /// Masquer la fenêtre après avoir choisi un élément.
     pub hide_after_copy: bool,
 }
@@ -19,6 +22,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             save_passwords: false,
+            detect_passwords: true,
             hide_after_copy: true,
         }
     }
@@ -66,6 +70,7 @@ mod tests {
         let s = Settings::default();
         assert!(!s.save_passwords, "les mots de passe doivent être ignorés par défaut");
         assert!(s.hide_after_copy);
+        assert!(s.detect_passwords);
     }
 
     #[test]
@@ -74,7 +79,7 @@ mod tests {
         let path = dir.join("settings.json");
         assert_eq!(Settings::load(&path), Settings::default(), "fichier absent");
 
-        let s = Settings { save_passwords: true, hide_after_copy: false };
+        let s = Settings { save_passwords: true, detect_passwords: false, hide_after_copy: false };
         s.save(&path);
         assert_eq!(Settings::load(&path), s);
 

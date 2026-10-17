@@ -65,6 +65,7 @@ pub fn spawn_watcher(
     history: Arc<Mutex<History>>,
     paused: Arc<AtomicBool>,
     save_passwords: Arc<AtomicBool>,
+    detect_passwords: Arc<AtomicBool>,
     ctx: egui::Context,
 ) {
     let spawned = thread::Builder::new()
@@ -90,7 +91,12 @@ pub fn spawn_watcher(
                     count,
                     paused.load(Ordering::Relaxed),
                     save_passwords.load(Ordering::Relaxed),
-                    pasteboard::types,
+                    || {
+                        let types = pasteboard::types();
+                        // Seulement les identifiants de types, jamais le contenu.
+                        log::info!("nouvelle copie, types : {types:?}");
+                        types
+                    },
                 );
                 let sensitive = match change {
                     Change::None => continue,
@@ -108,8 +114,20 @@ pub fn spawn_watcher(
                     }
                     last_text = Some(text.clone());
                 }
+                // Mot de passe copié sans marqueur (extension de navigateur…) ?
+                let probable = !sensitive
+                    && detect_passwords.load(Ordering::Relaxed)
+                    && pasteboard::looks_like_password(&text);
+                if probable && !save_passwords.load(Ordering::Relaxed) {
+                    log::info!("Copie ignorée (mot de passe probable)");
+                    continue;
+                }
+                let sensitive = sensitive || probable;
                 if sensitive {
-                    log::info!("Mot de passe enregistré (réglage activé), affiché masqué");
+                    log::info!(
+                        "Mot de passe enregistré ({}), chiffré et affiché masqué",
+                        if probable { "détecté" } else { "marqué confidentiel" }
+                    );
                 }
                 let changed = history.lock_safe().push_with(text, sensitive);
                 if changed {

@@ -108,6 +108,13 @@ try:
     check("…et détectée comme confidentielle malgré l'écriture en deux temps",
           content_now.count("Copie ignorée (contenu confidentiel)") >= 1)
 
+    # Copie depuis une extension de navigateur (Dashlane…) : texte brut, sans marqueur.
+    browser_pw = f"Dl#{uuid.uuid4().hex[:6]}Xk9!"
+    pbcopy(browser_pw)
+    time.sleep(1.5)
+    check("mot de passe d'extension (non marqué) détecté et ignoré", browser_pw not in stored_texts())
+    check("…et jamais écrit sur le disque", browser_pw.encode() not in db_bytes())
+
     again = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(again)
     time.sleep(1.5)
@@ -149,10 +156,14 @@ try:
     allowed = f"secret-autorise-{uuid.uuid4().hex[:8]}"
     copy_concealed(allowed)
     time.sleep(2)
+    browser_kept = f"Dl#{uuid.uuid4().hex[:6]}Xk9!"
+    pbcopy(browser_kept)
+    time.sleep(2)
     rows = stored_rows()
     encrypted = [t for t, sens in rows if sens and t.startswith("enc:v1:")]
-    check("réglage activé : le mot de passe est enregistré chiffré", len(encrypted) >= 2)
-    check("réglage activé : jamais écrit en clair", allowed.encode() not in db_bytes())
+    check("réglage activé : les mots de passe sont enregistrés chiffrés", len(encrypted) >= 3)
+    check("réglage activé : jamais écrits en clair",
+          allowed.encode() not in db_bytes() and browser_kept.encode() not in db_bytes())
     log3 = open("e2e-app3.log").read()
     check("réglage relu au démarrage", "save_passwords: true" in log3)
     check("pas d'erreur de trousseau", "chiffrement indisponible" not in log3)

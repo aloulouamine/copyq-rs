@@ -94,8 +94,9 @@ pub struct CopyApp {
     selected: usize,
     scroll_to_selected: bool,
     settings: Settings,
-    /// Partagé avec la surveillance du presse-papiers.
+    /// Partagés avec la surveillance du presse-papiers.
     save_passwords: Arc<AtomicBool>,
+    detect_passwords: Arc<AtomicBool>,
     confirm_clear: bool,
     open_settings_on_start: bool,
     login_status: login_item::Status,
@@ -114,10 +115,12 @@ impl CopyApp {
         log::info!("réglages : {settings:?}");
         let paused = Arc::new(AtomicBool::new(false));
         let save_passwords = Arc::new(AtomicBool::new(settings.save_passwords));
+        let detect_passwords = Arc::new(AtomicBool::new(settings.detect_passwords));
         clipboard::spawn_watcher(
             history.clone(),
             paused.clone(),
             save_passwords.clone(),
+            detect_passwords.clone(),
             cc.egui_ctx.clone(),
         );
 
@@ -144,7 +147,7 @@ impl CopyApp {
             }
         };
 
-        Self {
+        let mut app = Self {
             history,
             paused,
             clipboard: arboard::Clipboard::new().ok(),
@@ -153,6 +156,7 @@ impl CopyApp {
             scroll_to_selected: false,
             settings,
             save_passwords,
+            detect_passwords,
             login_status: login_item::status(),
             confirm_clear: false,
             open_settings_on_start: std::env::var_os("COPYQ_OPEN_SETTINGS").is_some(),
@@ -160,7 +164,12 @@ impl CopyApp {
             cache: None,
             _tray: tray,
             _hotkey: hotkey,
+        };
+        // Mots de passe copiés avant la détection (ex. depuis Dashlane) : rattrapage.
+        if app.settings.detect_passwords {
+            app.reclassify();
         }
+        app
     }
 
     fn rows(&mut self) -> Arc<Vec<Row>> {
@@ -287,6 +296,27 @@ impl CopyApp {
              affichées masquées et exclues de la recherche.",
             p,
         );
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if toggle(ui, &mut self.settings.detect_passwords, "Détecter les mots de passe", p)
+                .changed()
+            {
+                changed = true;
+                self.detect_passwords
+                    .store(self.settings.detect_passwords, Ordering::Relaxed);
+                log::info!("détection des mots de passe : {}", self.settings.detect_passwords);
+            }
+        });
+        caption(
+            ui,
+            "Pour les extensions de navigateur (Dashlane, 1Password, Bitwarden…) qui ne \
+             signalent pas leurs copies : un texte sans espace de 8 à 128 caractères mêlant \
+             majuscules, minuscules et chiffres. ⌘L corrige une erreur sur un élément.",
+            p,
+        );
+        if changed && self.settings.detect_passwords {
+            self.reclassify();
+        }
         if let Some(err) = storage::encryption_error() {
             ui.add(
                 egui::Label::new(
@@ -316,6 +346,33 @@ impl CopyApp {
 
         if changed {
             self.settings.save(&settings::default_path());
+        }
+    }
+
+    fn toggle_sensitive(&mut self, index: usize) {
+        let now_sensitive = {
+            let mut h = self.history.lock_safe();
+            let Some(current) = h.items().get(index).map(|it| it.sensitive) else { return };
+            h.set_sensitive(index, !current);
+            !current
+        };
+        if now_sensitive {
+            self.notify("Marqué comme mot de passe : chiffré et masqué");
+        } else {
+            self.notify("Affiché en clair");
+        }
+    }
+
+    /// Applique la détection aux éléments déjà enregistrés.
+    fn reclassify(&mut self) {
+        let n = self
+            .history
+            .lock_safe()
+            .reclassify_probable_passwords(self.settings.save_passwords);
+        if n > 0 {
+            let what = if self.settings.save_passwords { "chiffré(s) et masqué(s)" } else { "supprimé(s)" };
+            log::info!("{n} mot(s) de passe probable(s) déjà enregistré(s) : {what}");
+            self.notify(format!("{n} mot(s) de passe probable(s) {what}"));
         }
     }
 
@@ -377,13 +434,14 @@ impl eframe::App for CopyApp {
         }
 
         // ── Navigation clavier ─────────────────────────────────────────────
-        let (up, down, enter, esc, delete) = ctx.input(|i| {
+        let (up, down, enter, esc, delete, mark) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::ArrowUp),
                 i.key_pressed(egui::Key::ArrowDown),
                 i.key_pressed(egui::Key::Enter),
                 i.key_pressed(egui::Key::Escape),
                 i.modifiers.command && i.key_pressed(egui::Key::Backspace),
+                i.modifiers.command && i.key_pressed(egui::Key::L),
             )
         });
         if down && self.selected + 1 < rows.len() {
@@ -401,6 +459,10 @@ impl eframe::App for CopyApp {
         }
         if delete {
             to_delete = rows.get(self.selected).map(|r| r.index);
+        }
+        let mut to_toggle: Option<usize> = None;
+        if mark {
+            to_toggle = rows.get(self.selected).map(|r| r.index);
         }
         if esc {
             if self.query.is_empty() {
@@ -583,6 +645,7 @@ impl eframe::App for CopyApp {
                             match action {
                                 RowAction::Copy => clicked = Some((pos, row.index)),
                                 RowAction::Delete => to_delete = Some(row.index),
+                                RowAction::ToggleSensitive => to_toggle = Some(row.index),
                                 RowAction::None => {}
                             }
                         }
@@ -599,6 +662,8 @@ impl eframe::App for CopyApp {
 
         if let Some(i) = to_delete {
             self.delete_item(i);
+        } else if let Some(i) = to_toggle {
+            self.toggle_sensitive(i);
         } else if let Some(i) = to_copy {
             self.copy_item(ctx, i);
         }
@@ -644,6 +709,7 @@ enum RowAction {
     None,
     Copy,
     Delete,
+    ToggleSensitive,
 }
 
 /// Dessine une ligne de l'historique façon « carte » : icône, aperçu, métadonnées.
@@ -695,7 +761,7 @@ fn row_ui(
 
     // Texte.
     let text_x = tile.right() + 12.0;
-    let max_w = (inner.right() - 40.0 - text_x).max(40.0);
+    let max_w = (inner.right() - 72.0 - text_x).max(40.0);
     let title = single_line(ui, &row.title, 14.0, p.text, max_w);
     let meta = single_line(ui, &meta_text(row, now), 11.5, p.text_faint, max_w);
     let total_h = title.size().y + 3.0 + meta.size().y;
@@ -728,6 +794,27 @@ fn row_ui(
         );
         if del.clicked() {
             action = RowAction::Delete;
+        }
+
+        let lock_rect = action_rect.translate(egui::vec2(-30.0, 0.0));
+        let lock = ui
+            .interact(lock_rect, resp.id.with("lock"), Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(if row.sensitive {
+                "Ce n'est pas un mot de passe : afficher en clair (⌘L)"
+            } else {
+                "C'est un mot de passe : chiffrer et masquer (⌘L)"
+            });
+        if lock.hovered() {
+            painter.rect_filled(lock_rect, 7.0, p.accent.gamma_multiply(0.15));
+        }
+        icons::lock(
+            &painter,
+            lock_rect.center(),
+            if lock.hovered() || row.sensitive { p.accent } else { p.text_faint },
+        );
+        if lock.clicked() {
+            action = RowAction::ToggleSensitive;
         }
     } else if selected {
         icons::enter(&painter, action_rect.center(), p.accent);
