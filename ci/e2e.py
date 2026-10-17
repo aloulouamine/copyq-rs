@@ -236,5 +236,19 @@ log4 = open("e2e-app4.log").read()
 check("au redémarrage, les mots de passe chiffrés sont déchiffrés",
       "non déchiffrable" not in log4 and "chiffrement indisponible" not in log4)
 
+# Limites réglables : 12 éléments au plus → l'historique est réduit au lancement.
+with open(settings_path, "w") as f:
+    f.write('{"max_items": 12}')
+before = len(stored_kinds())
+app = subprocess.Popen([BIN], stdout=open("e2e-app5.log", "w"), stderr=subprocess.STDOUT)
+time.sleep(4)
+app.terminate()
+app.wait(timeout=10)
+os.remove(settings_path)
+log5 = open("e2e-app5.log").read()
+after = len(stored_kinds())
+check(f"limite de 12 éléments appliquée au lancement ({before} → {after})",
+      before > 12 and after == 12 and f"{before - 12} élément(s) supprimé(s)" in log5)
+
 print(open("e2e-app.log").read())
 sys.exit(1 if failures else 0)

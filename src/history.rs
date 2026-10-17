@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Valeurs par défaut des limites (modifiables dans Réglages → Limites).
 /// Nombre maximal d'éléments conservés.
 pub const MAX_ITEMS: usize = 500;
 /// Taille maximale d'un élément (au-delà, il est ignoré).
@@ -71,9 +72,31 @@ impl Item {
     }
 }
 
+/// Limites de l'historique.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Limits {
+    pub max_items: usize,
+    pub max_images: usize,
+    pub max_text_bytes: usize,
+    /// 0 = conservation illimitée.
+    pub retention_days: u32,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            max_items: MAX_ITEMS,
+            max_images: MAX_IMAGES,
+            max_text_bytes: MAX_ITEM_BYTES,
+            retention_days: 0,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct History {
     items: Vec<Item>,
+    limits: Limits,
     /// Absent dans les tests unitaires : historique purement en mémoire.
     store: Option<Store>,
     /// Incrémenté à chaque modification (permet à l'interface de mettre en cache).
@@ -94,7 +117,49 @@ impl History {
             items,
             store: Some(store),
             version: 0,
+            limits: Limits::default(),
         }
+    }
+
+    pub fn limits(&self) -> Limits {
+        self.limits
+    }
+
+    /// Change les limites et les applique tout de suite ; renvoie le nombre
+    /// d'éléments supprimés.
+    pub fn set_limits(&mut self, limits: Limits, now: u64) -> usize {
+        self.limits = limits;
+        let before = self.items.len();
+        self.expire(now);
+        self.evict();
+        let removed = before - self.items.len();
+        if removed > 0 {
+            self.version += 1;
+        }
+        removed
+    }
+
+    /// Nombre d'éléments que supprimerait l'application de ces limites (aperçu).
+    pub fn would_remove(&self, limits: Limits, now: u64) -> usize {
+        let (kept, _) = partition(&self.items, limits, now);
+        self.items.len() - kept
+    }
+
+    /// Supprime les éléments plus anciens que la durée de conservation.
+    pub fn expire(&mut self, now: u64) -> usize {
+        let Some(cutoff) = cutoff(self.limits, now) else { return 0 };
+        let (old, keep): (Vec<Item>, Vec<Item>) =
+            std::mem::take(&mut self.items).into_iter().partition(|it| it.copied_at < cutoff);
+        self.items = keep;
+        if let Some(store) = &self.store {
+            for item in &old {
+                store.delete(item);
+            }
+        }
+        if !old.is_empty() {
+            self.version += 1;
+        }
+        old.len()
     }
 
     pub fn items(&self) -> &[Item] {
@@ -125,7 +190,7 @@ impl History {
     /// Ajoute un élément (texte, image, fichiers) en tête ; un doublon (même nature,
     /// même contenu) est remonté au lieu d'être dupliqué.
     pub fn push_item(&mut self, new: Item) -> bool {
-        if new.text.trim().is_empty() || new.text.len() > MAX_ITEM_BYTES {
+        if new.text.trim().is_empty() || new.text.len() > self.limits.max_text_bytes {
             return false;
         }
         let same = |it: &Item| it.kind == new.kind && it.text == new.text;
@@ -154,14 +219,16 @@ impl History {
         true
     }
 
-    /// Applique les limites : `MAX_ITEMS` éléments, dont au plus `MAX_IMAGES` images.
+    /// Applique les limites de nombre (éléments, dont images).
     fn evict(&mut self) {
         let mut evicted = Vec::new();
         let mut images = 0;
         let mut kept = Vec::with_capacity(self.items.len());
         for item in std::mem::take(&mut self.items) {
             let is_image = item.kind == ItemKind::Image;
-            if kept.len() >= MAX_ITEMS || (is_image && images >= MAX_IMAGES) {
+            if kept.len() >= self.limits.max_items
+                || (is_image && images >= self.limits.max_images)
+            {
                 evicted.push(item);
                 continue;
             }
@@ -286,6 +353,28 @@ impl History {
             .map(|(i, _)| i)
             .collect()
     }
+}
+
+fn cutoff(limits: Limits, now: u64) -> Option<u64> {
+    (limits.retention_days > 0).then(|| now.saturating_sub(u64::from(limits.retention_days) * 86_400))
+}
+
+/// Combien d'éléments resteraient avec ces limites (même règle que `evict` + `expire`).
+fn partition(items: &[Item], limits: Limits, now: u64) -> (usize, usize) {
+    let cutoff = cutoff(limits, now);
+    let (mut kept, mut images) = (0, 0);
+    for it in items {
+        if cutoff.is_some_and(|c| it.copied_at < c) {
+            continue;
+        }
+        let is_image = it.kind == ItemKind::Image;
+        if kept >= limits.max_items || (is_image && images >= limits.max_images) {
+            continue;
+        }
+        images += usize::from(is_image);
+        kept += 1;
+    }
+    (kept, images)
 }
 
 /// Lit l'ancien fichier `history.json` (None s'il est absent ou illisible).
@@ -441,6 +530,52 @@ mod tests {
         assert_eq!(images, MAX_IMAGES, "au plus {MAX_IMAGES} images");
         assert!(h.items().iter().any(|i| i.kind == ItemKind::Files), "le reste est conservé");
         assert_eq!(h.items()[0].text, format!("h{}", MAX_IMAGES + 4));
+    }
+
+    #[test]
+    fn limits_can_be_changed_with_preview() {
+        let mut h = h();
+        for i in 0..20 {
+            h.push(format!("t{i}"));
+        }
+        let img = |x: &str| Item { text: x.into(), kind: ItemKind::Image, ..Default::default() };
+        h.push_item(img("i1"));
+        h.push_item(img("i2"));
+        let now = now_secs();
+        let small = Limits { max_items: 10, max_images: 1, ..Limits::default() };
+        assert_eq!(h.would_remove(small, now), 12, "aperçu : 22 → 10 (dont 1 image)");
+        assert_eq!(h.len(), 22, "l'aperçu ne supprime rien");
+        assert_eq!(h.set_limits(small, now), 12);
+        assert_eq!(h.len(), 10);
+        assert_eq!(h.items().iter().filter(|i| i.kind == ItemKind::Image).count(), 1);
+        assert_eq!(h.items()[0].text, "i2", "les plus récents sont gardés");
+        // Nouvelle limite appliquée aux ajouts suivants.
+        h.push("nouveau".into());
+        assert_eq!(h.len(), 10);
+        // Taille de texte.
+        h.set_limits(Limits { max_text_bytes: 5, ..small }, now);
+        assert!(!h.push("123456".into()));
+        assert!(h.push("12345".into()));
+    }
+
+    #[test]
+    fn retention_expires_old_items() {
+        let mut h = h();
+        h.push("récent".into());
+        h.push("ancien".into());
+        // Vieillir « ancien » de 40 jours.
+        let now = now_secs();
+        h.items[0].copied_at = now - 40 * 86_400;
+        let month = Limits { retention_days: 30, ..Limits::default() };
+        assert_eq!(h.would_remove(month, now), 1);
+        assert_eq!(h.set_limits(month, now), 1);
+        assert_eq!(h.items()[0].text, "récent");
+        assert_eq!(h.expire(now + 31 * 86_400), 1, "expire aussi plus tard");
+        assert_eq!(h.len(), 0);
+        // 0 = illimité.
+        h.push("x".into());
+        h.items[0].copied_at = 0;
+        assert_eq!(h.set_limits(Limits::default(), now), 0);
     }
 
     #[test]

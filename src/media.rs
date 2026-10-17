@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 /// Côté maximal de la vignette (pixels), assez grand pour l'aperçu au survol.
 pub const THUMB_MAX: u32 = 360;
-/// Au-delà (≈ 50 mégapixels), l'image est ignorée.
+/// Par défaut, au-delà de 50 mégapixels l'image est ignorée (réglable).
 pub const MAX_PIXELS: u64 = 50_000_000;
 
 pub fn images_dir() -> PathBuf {
@@ -43,10 +43,20 @@ pub fn hash_rgba(width: u32, height: u32, rgba: &[u8]) -> String {
 
 /// Enregistre une image RGBA en PNG + vignette. Ne réécrit pas une image déjà présente.
 pub fn save_rgba(dir: &Path, width: u32, height: u32, rgba: Vec<u8>) -> Result<Saved, String> {
+    save_rgba_limited(dir, width, height, rgba, MAX_PIXELS)
+}
+
+pub fn save_rgba_limited(
+    dir: &Path,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    max_pixels: u64,
+) -> Result<Saved, String> {
     if width == 0 || height == 0 {
         return Err("image vide".into());
     }
-    if u64::from(width) * u64::from(height) > MAX_PIXELS {
+    if u64::from(width) * u64::from(height) > max_pixels {
         return Err(format!("image trop grande ({width} × {height})"));
     }
     let hash = hash_rgba(width, height, &rgba);

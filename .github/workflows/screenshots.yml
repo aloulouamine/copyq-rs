@@ -87,6 +87,12 @@ jobs:
           sleep 8
           screencapture -x shots/settings.png || true
           kill $PID 2>/dev/null || true
+          sleep 2
+          COPYQ_THEME=light COPYQ_OPEN_SETTINGS=limits ./target/release/copyq-rs > shots/run-limits.log 2>&1 &
+          PID=$!
+          sleep 8
+          screencapture -x shots/limits.png || true
+          kill $PID 2>/dev/null || true
           ls -la shots
 
       - name: Publier les captures et journaux (branche ci-results)

@@ -10,7 +10,7 @@ use crate::media;
 use crate::logging::LockExt;
 use crate::pasteboard::{self, Payload};
 use eframe::egui;
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -72,6 +72,8 @@ pub struct Shared {
     /// Compteur du presse-papiers après une écriture de l'app elle-même (recopie
     /// d'un élément) : cette « copie » ne doit pas être réenregistrée.
     pub own_change: Arc<AtomicIsize>,
+    /// Taille maximale d'une image (pixels).
+    pub max_image_pixels: Arc<AtomicU64>,
 }
 
 impl Shared {
@@ -82,6 +84,7 @@ impl Shared {
             detect_passwords: Arc::new(AtomicBool::new(detect_passwords)),
             save_images: Arc::new(AtomicBool::new(save_images)),
             own_change: Arc::new(AtomicIsize::new(isize::MIN)),
+            max_image_pixels: Arc::new(AtomicU64::new(media::MAX_PIXELS)),
         }
     }
 
@@ -166,7 +169,8 @@ pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Co
                         }
                         let Ok(img) = clipboard.get_image() else { continue };
                         let (w, h) = (img.width as u32, img.height as u32);
-                        match media::save_rgba(&images_dir, w, h, img.bytes.into_owned()) {
+                        let max = shared.max_image_pixels.load(Ordering::Relaxed);
+                        match media::save_rgba_limited(&images_dir, w, h, img.bytes.into_owned(), max) {
                             Ok(saved) => {
                                 log::info!("image copiée : {}", saved.meta);
                                 Item {

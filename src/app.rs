@@ -112,6 +112,10 @@ pub struct CopyApp {
     thumbs: HashMap<String, Option<egui::TextureHandle>>,
     confirm_clear: bool,
     open_settings_on_start: bool,
+    settings_tab: SettingsTab,
+    /// Valeurs en cours de modification dans l'onglet « Limites ».
+    limits_draft: Option<Settings>,
+    last_expire: Instant,
     login_status: login_item::Status,
     toast: Option<Toast>,
     /// (version de l'historique, requête) → lignes.
@@ -169,11 +173,20 @@ impl CopyApp {
             login_status: login_item::status(),
             confirm_clear: false,
             open_settings_on_start: std::env::var_os("COPYQ_OPEN_SETTINGS").is_some(),
+            settings_tab: if std::env::var("COPYQ_OPEN_SETTINGS").as_deref() == Ok("limits") {
+                SettingsTab::Limits
+            } else {
+                SettingsTab::General
+            },
+            limits_draft: None,
+            last_expire: Instant::now(),
             toast,
             cache: None,
             _tray: tray,
             _hotkey: hotkey,
         };
+        // Limites choisies (dont durée de conservation).
+        app.apply_limits();
         // Mots de passe copiés avant la détection (ex. depuis Dashlane) : rattrapage.
         if app.settings.detect_passwords {
             app.reclassify();
@@ -315,11 +328,151 @@ impl CopyApp {
 
     /// Contenu du panneau « Réglages ».
     fn settings_ui(&mut self, ui: &mut Ui, p: &Palette) {
-        ui.set_width(310.0);
+        ui.set_width(330.0);
         ui.spacing_mut().item_spacing.y = 4.0;
-        ui.label(RichText::new("Réglages").size(13.5).color(p.text).strong());
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Réglages").size(13.5).color(p.text).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                for (tab, label) in [(SettingsTab::Limits, "Limites"), (SettingsTab::General, "Général")] {
+                    let active = self.settings_tab == tab;
+                    let text = RichText::new(label)
+                        .size(12.5)
+                        .color(if active { p.accent } else { p.text_muted });
+                    let button = egui::Button::new(text)
+                        .fill(if active { p.accent_soft } else { Color32::TRANSPARENT })
+                        .rounding(6.0);
+                    if ui.add(button).clicked() {
+                        self.settings_tab = tab;
+                    }
+                }
+            });
+        });
         ui.add_space(6.0);
+        let changed = match self.settings_tab {
+            SettingsTab::General => self.general_settings_ui(ui, p),
+            SettingsTab::Limits => self.limits_ui(ui, p),
+        };
+        if changed {
+            self.settings.save(&settings::default_path());
+        }
+    }
 
+    /// Onglet « Limites » : on modifie un brouillon, appliqué sur demande
+    /// (réduire une limite supprime des éléments).
+    fn limits_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
+        let mut draft = self.limits_draft.take().unwrap_or_else(|| self.settings.clone());
+        let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(label).size(12.5).color(p.text));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| add(ui));
+            });
+            caption(ui, help, p);
+            ui.add_space(6.0);
+        };
+        row(ui, "Nombre d'éléments", "Au-delà, les plus anciens sont supprimés.", &mut |ui| {
+            ui.add(
+                egui::DragValue::new(&mut draft.max_items)
+                    .range(settings::ITEMS_RANGE)
+                    .speed(5.0),
+            );
+        });
+        row(ui, "Nombre d'images", "Comptées dans le total ; 0 = aucune image gardée.", &mut |ui| {
+            ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
+        });
+        row(ui, "Taille d'un texte", "Un texte plus long est ignoré.", &mut |ui| {
+            ui.add(
+                egui::DragValue::new(&mut draft.max_text_kb)
+                    .range(settings::TEXT_KB_RANGE)
+                    .speed(10.0)
+                    .suffix(" Ko"),
+            );
+        });
+        row(ui, "Taille d'une image", "Une image plus grande est ignorée.", &mut |ui| {
+            ui.add(
+                egui::DragValue::new(&mut draft.max_image_mp)
+                    .range(settings::IMAGE_MP_RANGE)
+                    .suffix(" Mpx"),
+            );
+        });
+        row(ui, "Conservation", "Les éléments plus anciens sont effacés automatiquement.", &mut |ui| {
+            let current = settings::RETENTION_CHOICES
+                .iter()
+                .find(|(d, _)| *d == draft.retention_days)
+                .map(|(_, l)| l.to_string())
+                .unwrap_or_else(|| format!("{} jours", draft.retention_days));
+            egui::ComboBox::from_id_salt("retention")
+                .selected_text(current)
+                .show_ui(ui, |ui| {
+                    for (days, label) in settings::RETENTION_CHOICES {
+                        ui.selectable_value(&mut draft.retention_days, days, label);
+                    }
+                });
+        });
+
+        let mut changed = false;
+        let pending = draft != self.settings;
+        ui.horizontal(|ui| {
+            let defaults = self.settings.with_default_limits();
+            if draft != defaults
+                && ghost_button(ui, "Valeurs par défaut", p.text_muted, p).clicked()
+            {
+                draft = defaults;
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if pending {
+                    let apply = egui::Button::new(RichText::new("Appliquer").color(Color32::WHITE))
+                        .fill(p.accent)
+                        .rounding(7.0);
+                    if ui.add(apply).clicked() {
+                        self.settings = draft.clone();
+                        let removed = self.apply_limits();
+                        self.notify(if removed > 0 {
+                            format!("Limites appliquées : {removed} élément(s) supprimé(s)")
+                        } else {
+                            "Limites appliquées".to_string()
+                        });
+                        changed = true;
+                    }
+                    if ghost_button(ui, "Annuler", p.text_muted, p).clicked() {
+                        draft = self.settings.clone();
+                    }
+                }
+            });
+        });
+        if draft != self.settings {
+            let n = self
+                .history
+                .lock_safe()
+                .would_remove(draft.limits(), history::now_secs());
+            if n > 0 {
+                ui.label(
+                    RichText::new(format!("⚠ {n} élément(s) seront supprimés définitivement."))
+                        .size(11.5)
+                        .color(p.danger),
+                );
+            }
+        }
+        self.limits_draft = Some(draft);
+        changed
+    }
+
+    /// Applique les limites des réglages à l'historique et à la surveillance.
+    fn apply_limits(&mut self) -> usize {
+        self.shared
+            .max_image_pixels
+            .store(self.settings.max_image_pixels(), Ordering::Relaxed);
+        let removed = self
+            .history
+            .lock_safe()
+            .set_limits(self.settings.limits(), history::now_secs());
+        if removed > 0 {
+            log::info!("limites appliquées : {removed} élément(s) supprimé(s)");
+        }
+        removed
+    }
+
+    /// Onglet « Général ». Renvoie vrai si un réglage a changé.
+    fn general_settings_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
         let mut changed = false;
         ui.horizontal(|ui| {
             if toggle(ui, &mut self.settings.auto_paste, "Coller automatiquement", p).changed() {
@@ -464,9 +617,7 @@ impl CopyApp {
             }
         }
 
-        if changed {
-            self.settings.save(&settings::default_path());
-        }
+        changed
     }
 
     fn toggle_sensitive(&mut self, index: usize) {
@@ -536,6 +687,14 @@ impl CopyApp {
 
 impl eframe::App for CopyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Durée de conservation : vérifiée toutes les minutes.
+        if self.settings.retention_days > 0 && self.last_expire.elapsed() > Duration::from_secs(60) {
+            self.last_expire = Instant::now();
+            let n = self.history.lock_safe().expire(history::now_secs());
+            if n > 0 {
+                log::info!("{n} élément(s) expiré(s)");
+            }
+        }
         // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
         if std::mem::take(&mut self.open_settings_on_start) {
             ctx.memory_mut(|m| m.open_popup(egui::Id::new(SETTINGS_POPUP)));
@@ -839,6 +998,12 @@ impl CopyApp {
             });
         ctx.request_repaint_after(Duration::from_millis(30));
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum SettingsTab {
+    General,
+    Limits,
 }
 
 enum RowAction {

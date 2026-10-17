@@ -19,7 +19,8 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 
-const LOAD_LIMIT: usize = crate::history::MAX_ITEMS;
+/// Plafond de lecture au démarrage ; les limites choisies sont appliquées ensuite.
+const LOAD_LIMIT: usize = 100_000;
 
 /// Fournit la clé de chiffrement (appelé au plus une fois, au premier besoin).
 pub type KeyProvider = Box<dyn FnMut() -> Result<Key, String> + Send>;
