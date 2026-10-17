@@ -6,6 +6,7 @@ mod history;
 mod hotkey;
 mod icons;
 mod keyboard;
+mod pasteboard;
 mod platform;
 mod theme;
 mod tray;
