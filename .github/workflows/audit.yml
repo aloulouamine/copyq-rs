@@ -45,6 +45,13 @@ jobs:
           cargo tree --prefix none --edges normal 2>/dev/null | sort -u | wc -l | tee deps-count.log
           cargo update --dry-run --verbose 2>&1 | tee outdated.log || true
           ls -la target/release/copyq-rs 2>/dev/null | tee -a deps-count.log || true
+      - name: Dépendances signalées réellement compilées sur macOS ?
+        run: |
+          for c in quick-xml lru glib zvariant zbus_names paste proc-macro-error ttf-parser; do
+            echo "== $c"; cargo tree -i "$c" --target aarch64-apple-darwin --edges normal,build 2>&1 | head -8
+          done | tee mac-deps.log
+          cargo tree --target aarch64-apple-darwin --prefix none --edges normal 2>/dev/null | sort -u | wc -l | tee mac-count.log
+
       - name: Publier (branche ci-audit)
         if: always()
         run: |
