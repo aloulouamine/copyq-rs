@@ -48,12 +48,7 @@ jobs:
         run: |
           mkdir -p shots
           for mode in light dark; do
-            if [ "$mode" = dark ]; then
-              defaults write -g AppleInterfaceStyle Dark
-            else
-              defaults delete -g AppleInterfaceStyle 2>/dev/null || true
-            fi
-            ./target/release/copyq-rs > "shots/run-$mode.log" 2>&1 &
+            COPYQ_THEME=$mode ./target/release/copyq-rs > "shots/run-$mode.log" 2>&1 &
             PID=$!
             sleep 8
             screencapture -x "shots/$mode.png" || echo "screencapture a échoué"

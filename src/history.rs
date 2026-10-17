@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Nombre maximal d'éléments conservés.
@@ -134,10 +134,6 @@ impl History {
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, json)?;
         fs::rename(&tmp, path)
-    }
-
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
     }
 }
 

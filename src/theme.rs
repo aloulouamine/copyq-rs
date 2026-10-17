@@ -60,6 +60,13 @@ pub fn install(ctx: &egui::Context) {
     install_fonts(ctx);
     ctx.set_style_of(egui::Theme::Dark, style(egui::Visuals::dark(), &DARK));
     ctx.set_style_of(egui::Theme::Light, style(egui::Visuals::light(), &LIGHT));
+
+    // Forcer un thème : COPYQ_THEME=dark ou COPYQ_THEME=light (sinon : celui de macOS).
+    match std::env::var("COPYQ_THEME").as_deref() {
+        Ok("dark") => ctx.set_theme(egui::Theme::Dark),
+        Ok("light") => ctx.set_theme(egui::Theme::Light),
+        _ => {}
+    }
 }
 
 fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
@@ -70,13 +77,13 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
     v.extreme_bg_color = p.surface;
     v.faint_bg_color = p.surface;
     v.window_rounding = Rounding::same(12.0);
-    v.window_stroke = Stroke::new(1.0, p.border);
+    v.window_stroke = Stroke::new(1.0_f32, p.border);
     v.menu_rounding = r;
     v.hyperlink_color = p.accent;
     v.override_text_color = None;
     v.selection.bg_fill = p.accent.gamma_multiply(0.35);
-    v.selection.stroke = Stroke::new(1.0, p.accent);
-    v.text_cursor.stroke = Stroke::new(2.0, p.accent);
+    v.selection.stroke = Stroke::new(1.0_f32, p.accent);
+    v.text_cursor.stroke = Stroke::new(2.0_f32, p.accent);
 
     for (w, fill) in [
         (&mut v.widgets.noninteractive, p.bg),
@@ -91,11 +98,11 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
         w.bg_stroke = Stroke::NONE;
         w.expansion = 0.0;
     }
-    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.text);
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
-    v.widgets.inactive.fg_stroke = Stroke::new(1.0, p.text);
-    v.widgets.hovered.fg_stroke = Stroke::new(1.0, p.text);
-    v.widgets.active.fg_stroke = Stroke::new(1.0, p.text);
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, p.text);
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.border);
+    v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, p.text);
+    v.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, p.text);
+    v.widgets.active.fg_stroke = Stroke::new(1.0_f32, p.text);
 
     let mut s = egui::Style {
         visuals: v,

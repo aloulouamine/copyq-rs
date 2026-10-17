@@ -4,6 +4,7 @@ mod app;
 mod clipboard;
 mod history;
 mod hotkey;
+mod icons;
 mod keyboard;
 mod platform;
 mod theme;

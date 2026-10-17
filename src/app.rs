@@ -2,7 +2,7 @@
 
 use crate::history::{self, History};
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, platform, tray};
+use crate::{clipboard, hotkey, icons, platform, tray};
 use eframe::egui::{
     self, text::LayoutJob, text::TextWrapping, Align2, Color32, FontId, Frame, Margin, Rect,
     RichText, Rounding, Sense, Stroke, Ui,
@@ -44,13 +44,21 @@ impl Kind {
         }
     }
 
-    fn glyph(self) -> &'static str {
+    fn paint(self, painter: &egui::Painter, center: egui::Pos2, color: Color32) {
         match self {
-            Kind::Link => "🔗",
-            Kind::Path => "📁",
-            Kind::Email => "✉",
-            Kind::Multiline => "☰",
-            Kind::Text => "Aa",
+            Kind::Link => icons::globe(painter, center, color),
+            Kind::Path => icons::folder(painter, center, color),
+            Kind::Email => icons::envelope(painter, center, color),
+            Kind::Multiline => icons::lines(painter, center, color),
+            Kind::Text => {
+                painter.text(
+                    center,
+                    Align2::CENTER_CENTER,
+                    "Aa",
+                    FontId::proportional(12.5),
+                    color,
+                );
+            }
         }
     }
 }
@@ -303,7 +311,7 @@ impl eframe::App for CopyApp {
 
                 Frame::none()
                     .fill(p.surface)
-                    .stroke(Stroke::new(1.0, p.border))
+                    .stroke(Stroke::new(1.0_f32, p.border))
                     .rounding(10.0)
                     .inner_margin(Margin::symmetric(12.0, 9.0))
                     .show(ui, |ui| {
@@ -355,7 +363,7 @@ impl eframe::App for CopyApp {
             .show(ctx, |ui| {
                 let r = ui.clip_rect();
                 ui.painter()
-                    .hline(r.x_range(), r.top(), Stroke::new(1.0, p.border));
+                    .hline(r.x_range(), r.top(), Stroke::new(1.0_f32, p.border));
 
                 ui.horizontal(|ui| {
                     let mut paused = self.paused.load(Ordering::Relaxed);
@@ -395,7 +403,7 @@ impl eframe::App for CopyApp {
                     for (key, label) in [
                         ("⌘⇧Z", "ouvrir"),
                         ("↑↓", "naviguer"),
-                        ("↵", "copier"),
+                        ("entrée", "copier"),
                         ("⌘⌫", "supprimer"),
                         ("esc", "fermer"),
                     ] {
@@ -543,14 +551,9 @@ fn row_ui(
         egui::vec2(30.0, 30.0),
     );
     painter.rect_filled(tile, 8.0, if selected { p.surface } else { p.surface_hover });
-    painter.rect_stroke(tile, 8.0, Stroke::new(1.0, p.border));
-    painter.text(
-        tile.center(),
-        Align2::CENTER_CENTER,
-        row.kind.glyph(),
-        FontId::proportional(13.0),
-        if selected { p.accent } else { p.text_muted },
-    );
+    painter.rect_stroke(tile, 8.0, Stroke::new(1.0_f32, p.border));
+    row.kind
+        .paint(&painter, tile.center(), if selected { p.accent } else { p.text_muted });
 
     // Texte.
     let text_x = tile.right() + 12.0;
@@ -580,24 +583,16 @@ fn row_ui(
         if del.hovered() {
             painter.rect_filled(action_rect, 7.0, p.danger.gamma_multiply(0.15));
         }
-        painter.text(
+        icons::trash(
+            &painter,
             action_rect.center(),
-            Align2::CENTER_CENTER,
-            "🗑",
-            FontId::proportional(13.0),
             if del.hovered() { p.danger } else { p.text_faint },
         );
         if del.clicked() {
             action = RowAction::Delete;
         }
     } else if selected {
-        painter.text(
-            action_rect.center(),
-            Align2::CENTER_CENTER,
-            "↵",
-            FontId::proportional(15.0),
-            p.accent,
-        );
+        icons::enter(&painter, action_rect.center(), p.accent);
     }
 
     if matches!(action, RowAction::None) && resp.clicked() {
@@ -712,7 +707,7 @@ fn ghost_button(ui: &mut Ui, text: &str, color: Color32, p: &Palette) -> egui::R
 fn kbd(ui: &mut Ui, key: &str, p: &Palette) {
     Frame::none()
         .fill(p.surface)
-        .stroke(Stroke::new(1.0, p.border))
+        .stroke(Stroke::new(1.0_f32, p.border))
         .rounding(4.0)
         .inner_margin(Margin::symmetric(5.0, 1.0))
         .show(ui, |ui| {
