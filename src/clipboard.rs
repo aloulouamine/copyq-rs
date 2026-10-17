@@ -389,6 +389,7 @@ pub fn media_selftest() -> i32 {
         .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
         .collect();
     let saved = media::save_rgba(&dir, 64, 32, px).expect("image de test");
+    println!("image de test enregistrée : {}", saved.meta);
 
     // Recopie d'image : on lit directement le fichier enregistré.
     let img = Item {
