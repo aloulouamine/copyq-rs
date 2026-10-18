@@ -1,0 +1,33 @@
+== quick-xml@0.30.0
+error: package ID specification `quick-xml@0.30.0` did not match any packages
+help: there are similar package ID specifications:
+
+  quick-xml@0.41.0
+== lru
+error: package ID specification `lru` did not match any packages
+
+help: a package with a similar name exists: `log`
+== glib
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+== zvariant
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+== zbus_names
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+== paste
+error: package ID specification `paste` did not match any packages
+
+help: a package with a similar name exists: `pastey`
+== proc-macro-error
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+== ttf-parser
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.

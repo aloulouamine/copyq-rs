@@ -1,0 +1,1219 @@
+    Checking copyq-rs v0.1.0 (/Users/runner/work/copyq-rs/copyq-rs)
+warning: binding's name is too similar to existing binding
+   --> src/app/row.rs:189:9
+    |
+189 |     let title = single_line(ui, &row.title, 14.0, p.text, max_w);
+    |         ^^^^^
+    |
+note: existing binding defined here
+   --> src/app/row.rs:138:9
+    |
+138 |     let tile = Rect::from_center_size(
+    |         ^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#similar_names
+    = note: `-W clippy::similar-names` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::similar_names)]`
+
+warning: 6 bindings with single-character names in scope
+   --> src/icons.rs:150:17
+    |
+150 | pub fn document(p: &Painter, c: Pos2, color: Color32) {
+    |                 ^            ^
+151 |     let (l, r, t, b) = (c.x - 5.5, c.x + 5.5, c.y - 7.0, c.y + 7.0);
+    |          ^  ^  ^  ^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#many_single_char_names
+    = note: `-W clippy::many-single-char-names` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::many_single_char_names)]`
+
+warning: item in documentation is missing backticks
+ --> src/main.rs:1:71
+  |
+1 | //! CopyQ-rs : gestionnaire d'historique du presse-papiers inspiré de CopyQ.
+  |                                                                       ^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+  = note: `-W clippy::doc-markdown` implied by `-W clippy::pedantic`
+  = help: to override `-W clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+  |
+1 - //! CopyQ-rs : gestionnaire d'historique du presse-papiers inspiré de CopyQ.
+1 + //! CopyQ-rs : gestionnaire d'historique du presse-papiers inspiré de `CopyQ`.
+  |
+
+warning: these match arms have identical bodies
+  --> src/app/row.rs:52:13
+   |
+52 |             Kind::Path => icons::folder(painter, center, color),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+58 |             Kind::Folder => icons::folder(painter, center, color),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is unintentional make the arms return different values
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#match_same_arms
+   = note: `-W clippy::match-same-arms` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::match_same_arms)]`
+help: otherwise merge the patterns into a single arm
+   |
+52 ~             Kind::Path | Kind::Folder => icons::folder(painter, center, color),
+53 |             Kind::Email => icons::envelope(painter, center, color),
+...
+57 |             Kind::File => icons::document(painter, center, color),
+58 ~             Kind::Text => {
+   |
+
+warning: this function has too many lines (162/100)
+   --> src/app/row.rs:98:1
+    |
+ 98 | / pub(super) fn row_ui(
+ 99 | |     ui: &mut Ui,
+100 | |     row: &Row,
+101 | |     thumb: Option<&egui::TextureHandle>,
+...   |
+106 | |     p: &Palette,
+107 | | ) -> RowAction {
+    | |______________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_lines
+    = note: `-W clippy::too-many-lines` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:149:38
+    |
+149 |         let scale = (frame.width() / w as f32)
+    |                                      ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+    = note: `-W clippy::cast-precision-loss` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_precision_loss)]`
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:150:35
+    |
+150 |             .min(frame.height() / h as f32)
+    |                                   ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:152:69
+    |
+152 |         let img = Rect::from_center_size(frame.center(), egui::vec2(w as f32, h as f32) * scale);
+    |                                                                     ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:152:79
+    |
+152 |         let img = Rect::from_center_size(frame.center(), egui::vec2(w as f32, h as f32) * scale);
+    |                                                                               ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:265:34
+    |
+265 |             let scale = (420.0 / w as f32).min(320.0 / h as f32).min(1.0);
+    |                                  ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:265:56
+    |
+265 |             let scale = (420.0 / w as f32).min(320.0 / h as f32).min(1.0);
+    |                                                        ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:268:28
+    |
+268 |                 egui::vec2(w as f32, h as f32) * scale,
+    |                            ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:268:38
+    |
+268 |                 egui::vec2(w as f32, h as f32) * scale,
+    |                                      ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: assigning the result of `Clone::clone()` may be inefficient
+   --> src/app/row.rs:320:13
+    |
+320 |             row.detail = it.meta.clone();
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use `clone_from()`: `row.detail.clone_from(&it.meta)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assigning_clones
+    = note: `-W clippy::assigning-clones` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::assigning_clones)]`
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+   --> src/app/row.rs:327:17
+    |
+327 | /                 p.file_name()
+328 | |                     .map(|n| n.to_string_lossy().nfc().collect::<String>())
+329 | |                     .unwrap_or_else(|| p.display().to_string().nfc().collect())
+    | |_______________________________________________________________________________^ help: try: `p.file_name().map_or_else(|| p.display().to_string().nfc().collect(), |n| n.to_string_lossy().nfc().collect::<String>())`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+    = note: `-W clippy::map-unwrap-or` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::map_unwrap_or)]`
+
+warning: use of `Option<Option<T>>`
+   --> src/app/row.rs:377:6
+    |
+377 | ) -> Option<Option<egui::TextureHandle>> {
+    |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: consider using `Option<egui::TextureHandle>`, or a custom enum if you need to distinguish all 3 cases
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#option_option
+    = note: `-W clippy::option-option` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::option_option)]`
+
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> src/app/row.rs:382:9
+    |
+382 |         static WARM_UP: Once = Once::new();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#items_after_statements
+    = note: `-W clippy::items-after-statements` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::items_after_statements)]`
+
+warning: casting `usize` to `f32` may cause a loss of precision (`usize` can be up to 64 bits wide depending on the target architecture, but `f32`'s mantissa is only 23 bits wide)
+   --> src/app/row.rs:446:34
+    |
+446 |         let k = format!("{:.1}", row.chars as f32 / 1000.0).replace('.', ",");
+    |                                  ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: this function has too many lines (147/100)
+  --> src/app/settings_panel.rs:56:5
+   |
+56 |     fn limits_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_lines
+
+warning: consider adding a `;` to the last statement for consistent formatting
+  --> src/app/settings_panel.rs:77:21
+   |
+77 |                     add(ui)
+   |                     ^^^^^^^ help: add a `;` here: `add(ui);`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#semicolon_if_nothing_returned
+   = note: `-W clippy::semicolon-if-nothing-returned` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::semicolon_if_nothing_returned)]`
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+   --> src/app/settings_panel.rs:146:31
+    |
+146 |                   let current = settings::RETENTION_CHOICES
+    |  _______________________________^
+147 | |                     .iter()
+148 | |                     .find(|(d, _)| *d == draft.retention_days)
+149 | |                     .map(|(_, l)| l.to_string())
+150 | |                     .unwrap_or_else(|| format!("{} jours", draft.retention_days));
+    | |_________________________________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+help: try
+    |
+146 ~                 let current = settings::RETENTION_CHOICES
+147 +                     .iter()
+148 ~                     .find(|(d, _)| *d == draft.retention_days).map_or_else(|| format!("{} jours", draft.retention_days), |(_, l)| l.to_string());
+    |
+
+warning: this function has too many lines (182/100)
+   --> src/app/settings_panel.rs:209:5
+    |
+209 |     fn general_settings_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_lines
+
+warning: casting `f32` to `u8` may truncate the value
+  --> src/app/widgets.rs:69:47
+   |
+69 |         .rect_filled(rect, CornerRadius::same(radius as u8), track);
+   |                                               ^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+   = note: `-W clippy::cast-possible-truncation` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_truncation)]`
+
+warning: casting `f32` to `u8` may lose the sign of the value
+  --> src/app/widgets.rs:69:47
+   |
+69 |         .rect_filled(rect, CornerRadius::same(radius as u8), track);
+   |                                               ^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_sign_loss
+   = note: `-W clippy::cast-sign-loss` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_sign_loss)]`
+
+warning: casting `f32` to `u8` may truncate the value
+   --> src/app/widgets.rs:102:28
+    |
+102 |     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+
+warning: casting `f32` to `u8` may lose the sign of the value
+   --> src/app/widgets.rs:102:28
+    |
+102 |     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_sign_loss
+
+warning: casts from `u8` to `f32` can be expressed infallibly using `From`
+   --> src/app/widgets.rs:102:29
+    |
+102 |     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    |                             ^^^^^^^^
+    |
+    = help: an `as` cast can become silently lossy if the types change in the future
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_lossless
+    = note: `-W clippy::cast-lossless` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_lossless)]`
+help: use `f32::from` instead
+    |
+102 -     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+102 +     let l = |x: u8, y: u8| (f32::from(x) + (y as f32 - x as f32) * t).round() as u8;
+    |
+
+warning: casts from `u8` to `f32` can be expressed infallibly using `From`
+   --> src/app/widgets.rs:102:41
+    |
+102 |     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    |                                         ^^^^^^^^
+    |
+    = help: an `as` cast can become silently lossy if the types change in the future
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_lossless
+help: use `f32::from` instead
+    |
+102 -     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+102 +     let l = |x: u8, y: u8| (x as f32 + (f32::from(y) - x as f32) * t).round() as u8;
+    |
+
+warning: casts from `u8` to `f32` can be expressed infallibly using `From`
+   --> src/app/widgets.rs:102:52
+    |
+102 |     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    |                                                    ^^^^^^^^
+    |
+    = help: an `as` cast can become silently lossy if the types change in the future
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_lossless
+help: use `f32::from` instead
+    |
+102 -     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+102 +     let l = |x: u8, y: u8| (x as f32 + (y as f32 - f32::from(x)) * t).round() as u8;
+    |
+
+warning: consider adding a `;` to the last statement for consistent formatting
+   --> src/app/mod.rs:300:25
+    |
+300 |                         self.notify_error("À valider dans Réglages → Général → Ouverture")
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: add a `;` here: `self.notify_error("À valider dans Réglages → Général → Ouverture");`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#semicolon_if_nothing_returned
+
+warning: unchecked subtraction of a `Duration`
+   --> src/app/mod.rs:663:25
+    |
+663 |         let remaining = (toast.duration - elapsed).as_secs_f32();
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `toast.duration.checked_sub(elapsed).unwrap()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unchecked_time_subtraction
+    = note: `-W clippy::unchecked-time-subtraction` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unchecked_time_subtraction)]`
+
+warning: this function has too many lines (140/100)
+   --> src/clipboard.rs:222:1
+    |
+222 | pub fn spawn_watcher(history: Arc<Mutex<History>>, shared: Shared, ctx: egui::Context) {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_lines
+
+warning: assigning the result of `Clone::clone()` may be inefficient
+   --> src/clipboard.rs:260:25
+    |
+260 |                         seen_types = types.clone();
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use `clone_from()`: `seen_types.clone_from(&types)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assigning_clones
+
+warning: casting `usize` to `u32` may truncate the value on targets with 64-bit wide pointers
+   --> src/clipboard.rs:298:39
+    |
+298 |                         let (w, h) = (img.width as u32, img.height as u32);
+    |                                       ^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+298 -                         let (w, h) = (img.width as u32, img.height as u32);
+298 +                         let (w, h) = (u32::try_from(img.width), img.height as u32);
+    |
+
+warning: casting `usize` to `u32` may truncate the value on targets with 64-bit wide pointers
+   --> src/clipboard.rs:298:57
+    |
+298 |                         let (w, h) = (img.width as u32, img.height as u32);
+    |                                                         ^^^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+298 -                         let (w, h) = (img.width as u32, img.height as u32);
+298 +                         let (w, h) = (img.width as u32, u32::try_from(img.height));
+    |
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/clipboard.rs:312:35
+    |
+312 |   ...                   meta: match media::stored_size(&images_dir, &hash) {
+    |  _____________________________^
+313 | | ...                       Some(size) => media::describe(w, h, size),
+314 | | ...                       None => {
+315 | | ...                           pending_image = Some(ImageJob {
+...   |
+323 | | ...                   },
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#single_match_else
+    = note: `-W clippy::single-match-else` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::single_match_else)]`
+help: try
+    |
+312 ~                             meta: if let Some(size) = media::stored_size(&images_dir, &hash) { media::describe(w, h, size) } else {
+313 +                                 pending_image = Some(ImageJob {
+314 +                                     hash,
+315 +                                     width: w,
+316 +                                     height: h,
+317 +                                     rgba,
+318 +                                 });
+319 +                                 media::dimensions(w, h)
+320 ~                             },
+    |
+
+warning: casting `i32` to `u8` may truncate the value
+   --> src/clipboard.rs:424:24
+    |
+424 |         .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
+    |                        ^^^^^^^^^^^^^^^
+    |
+    = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+    |
+424 -         .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
+424 +         .flat_map(|i| [u8::try_from(i % 256), 80, 160, 255])
+    |
+
+warning: casting `i32` to `u8` may lose the sign of the value
+   --> src/clipboard.rs:424:24
+    |
+424 |         .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
+    |                        ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_sign_loss
+
+warning: use of `format!` to build up a string from an iterator
+   --> src/crypto.rs:137:9
+    |
+137 | /         mac.finalize()
+138 | |             .into_bytes()
+139 | |             .iter()
+140 | |             .map(|b| format!("{b:02x}"))
+141 | |             .collect()
+    | |______________________^
+    |
+help: call `fold` instead
+   --> src/crypto.rs:140:14
+    |
+140 |             .map(|b| format!("{b:02x}"))
+    |              ^^^
+help: ... and use the `write!` macro here
+   --> src/crypto.rs:140:22
+    |
+140 |             .map(|b| format!("{b:02x}"))
+    |                      ^^^^^^^^^^^^^^^^^^
+    = note: this can be written more efficiently by appending to a `String` directly
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#format_collect
+    = note: `-W clippy::format-collect` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::format_collect)]`
+
+warning: called `map(<f>).unwrap_or(<a>)` on a `Result` value
+   --> src/history.rs:538:5
+    |
+538 | /     SystemTime::now()
+539 | |         .duration_since(UNIX_EPOCH)
+540 | |         .map(|d| d.as_secs())
+541 | |         .unwrap_or(0)
+    | |_____________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+help: use `map_or(<a>, <f>)` instead
+    |
+540 -         .map(|d| d.as_secs())
+541 -         .unwrap_or(0)
+540 +         .map_or(0, |d| d.as_secs())
+    |
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+   --> src/history.rs:569:5
+    |
+569 | /     directories::ProjectDirs::from("com", "amine", "copyq-rs")
+570 | |         .map(|d| d.data_dir().to_path_buf())
+571 | |         .unwrap_or_else(|| PathBuf::from("."))
+    | |______________________________________________^ help: try: `directories::ProjectDirs::from("com", "amine", "copyq-rs").map_or_else(|| PathBuf::from("."), |d| d.data_dir().to_path_buf())`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+
+warning: casting `i32` to `f32` may cause a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+  --> src/icons.rs:22:21
+   |
+22 |             let t = i as f32 / 24.0 * std::f32::consts::TAU;
+   |                     ^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `i32` to `f32` may cause a loss of precision (`i32` is 32 bits wide, but `f32`'s mantissa is only 23 bits wide)
+   --> src/icons.rs:121:45
+    |
+121 |             let t = std::f32::consts::PI * (i as f32 / 12.0);
+    |                                             ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: `as` casting between raw pointers without changing their constness
+   --> src/keyboard.rs:123:34
+    |
+123 |                     let layout = CFDataGetBytePtr(data) as *const c_void;
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try `pointer::cast`, a safer alternative: `CFDataGetBytePtr(data).cast::<c_void>()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#ptr_as_ptr
+    = note: `-W clippy::ptr-as-ptr` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::ptr_as_ptr)]`
+
+warning: casts from `u8` to `u32` can be expressed infallibly using `From`
+   --> src/keyboard.rs:132:25
+    |
+132 |                         LMGetKbdType() as u32,
+    |                         ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: an `as` cast can become silently lossy if the types change in the future
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_lossless
+help: use `u32::from` instead
+    |
+132 -                         LMGetKbdType() as u32,
+132 +                         u32::from(LMGetKbdType()),
+    |
+
+warning: implicit borrow as raw pointer
+   --> src/keyboard.rs:134:25
+    |
+134 |                         &mut dead,
+    |                         ^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#borrow_as_ptr
+    = note: `-W clippy::borrow-as-ptr` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::borrow_as_ptr)]`
+help: use a raw pointer instead
+    |
+134 |                         &raw mut dead,
+    |                          +++
+
+warning: implicit borrow as raw pointer
+   --> src/keyboard.rs:136:25
+    |
+136 |                         &mut len,
+    |                         ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#borrow_as_ptr
+help: use a raw pointer instead
+    |
+136 |                         &raw mut len,
+    |                          +++
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on an `Option` value
+  --> src/logging.rs:60:5
+   |
+60 | /     directories::BaseDirs::new()
+61 | |         .map(|d| d.home_dir().join("Library/Logs/copyq-rs/copyq-rs.log"))
+62 | |         .unwrap_or_else(|| PathBuf::from("copyq-rs.log"))
+   | |_________________________________________________________^ help: try: `directories::BaseDirs::new().map_or_else(|| PathBuf::from("copyq-rs.log"), |d| d.home_dir().join("Library/Logs/copyq-rs/copyq-rs.log"))`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+
+warning: called `map(<f>).unwrap_or(false)` on a `Result` value
+  --> src/logging.rs:71:8
+   |
+71 |       if fs::metadata(&path)
+   |  ________^
+72 | |         .map(|m| m.len() > MAX_LOG_BYTES)
+73 | |         .unwrap_or(false)
+   | |_________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+help: use `is_ok_and(<f>)` instead
+   |
+72 -         .map(|m| m.len() > MAX_LOG_BYTES)
+73 -         .unwrap_or(false)
+72 +         .is_ok_and(|m| m.len() > MAX_LOG_BYTES)
+   |
+
+warning: case-sensitive file extension comparison
+  --> src/login_item.rs:34:52
+   |
+34 |             bundle.bundleIdentifier().is_some() && bundle.bundlePath().to_string().ends_with(".app")
+   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a case-insensitive comparison instead
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#case_sensitive_file_extension_comparisons
+   = note: `-W clippy::case-sensitive-file-extension-comparisons` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::case_sensitive_file_extension_comparisons)]`
+help: use std::path::Path
+   |
+34 ~             bundle.bundleIdentifier().is_some() && std::path::Path::new(&bundle.bundlePath().to_string())
+35 +                 .extension()
+36 +                 .is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
+   |
+
+warning: boolean to int conversion using if
+   --> src/login_item.rs:121:5
+    |
+121 | /     if ok {
+122 | |         0
+123 | |     } else {
+124 | |         1
+125 | |     }
+    | |_____^ help: replace with from: `i32::from(!ok)`
+    |
+    = note: `!ok as i32` or `(!ok).into()` can also be valid options
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#bool_to_int_with_if
+    = note: `-W clippy::bool-to-int-with-if` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::bool_to_int_with_if)]`
+
+warning: use of `format!` to build up a string from an iterator
+  --> src/media.rs:78:5
+   |
+78 |     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: call `fold` instead
+  --> src/media.rs:78:25
+   |
+78 |     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+   |                         ^^^
+help: ... and use the `write!` macro here
+  --> src/media.rs:78:33
+   |
+78 |     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+   |                                 ^^^^^^^^^^^^^^^^^^
+   = note: this can be written more efficiently by appending to a `String` directly
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#format_collect
+
+warning: called `map(<f>).unwrap_or(<a>)` on a `Result` value
+   --> src/media.rs:177:8
+    |
+177 |     Ok(std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0))
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+help: use `map_or(<a>, <f>)` instead
+    |
+177 -     Ok(std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0))
+177 +     Ok(std::fs::metadata(&full).map_or(0, |m| m.len()))
+    |
+
+warning: casting `u64` to `f64` may cause a loss of precision (`u64` is 64 bits wide, but `f64`'s mantissa is only 52 bits wide)
+   --> src/media.rs:293:34
+    |
+293 |         _ => format!("{:.1} Mo", bytes as f64 / 1_000_000.0).replace('.', ","),
+    |                                  ^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_precision_loss
+
+warning: casting `u32` to `i32` may wrap around the value
+  --> src/paste.rs:29:19
+   |
+29 |         if pid != std::process::id() as i32 {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, use `cast_signed()` instead: `std::process::id().cast_signed()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_wrap
+   = note: `-W clippy::cast-possible-wrap` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::cast_possible_wrap)]`
+
+warning: implicit borrow as raw pointer
+   --> src/paste.rs:154:17
+    |
+154 |                 &kCFTypeDictionaryKeyCallBacks,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#borrow_as_ptr
+help: use a raw pointer instead
+    |
+154 |                 &raw const kCFTypeDictionaryKeyCallBacks,
+    |                  +++++++++
+
+warning: implicit borrow as raw pointer
+   --> src/paste.rs:155:17
+    |
+155 |                 &kCFTypeDictionaryValueCallBacks,
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#borrow_as_ptr
+help: use a raw pointer instead
+    |
+155 |                 &raw const kCFTypeDictionaryValueCallBacks,
+    |                  +++++++++
+
+warning: `as` casting between raw pointers while changing only its constness
+   --> src/paste.rs:199:27
+    |
+199 |                 CFRelease(ev as CFTypeRef);
+    |                           ^^^^^^^^^^^^^^^ help: try `pointer::cast_const`, a safer alternative: `ev.cast_const()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#ptr_cast_constness
+    = note: `-W clippy::ptr-cast-constness` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::ptr_cast_constness)]`
+
+warning: `as` casting between raw pointers while changing only its constness
+   --> src/paste.rs:202:27
+    |
+202 |                 CFRelease(source as CFTypeRef);
+    |                           ^^^^^^^^^^^^^^^^^^^ help: try `pointer::cast_const`, a safer alternative: `source.cast_const()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#ptr_cast_constness
+
+warning: item in documentation is missing backticks
+ --> src/pasteboard.rs:1:47
+  |
+1 | //! Accès bas niveau au presse-papiers macOS (NSPasteboard) :
+  |                                               ^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+  |
+1 - //! Accès bas niveau au presse-papiers macOS (NSPasteboard) :
+1 + //! Accès bas niveau au presse-papiers macOS (`NSPasteboard`) :
+  |
+
+warning: you should put bare URLs between `<`/`>` or make a proper Markdown link
+ --> src/pasteboard.rs:5:55
+  |
+5 | /// un contenu confidentiel ou temporaire (convention http://nspasteboard.org).
+  |                                                       ^^^^^^^^^^^^^^^^^^^^^^^ help: try: `<http://nspasteboard.org>`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+
+warning: redundant closure
+  --> src/pasteboard.rs:82:35
+   |
+82 |     let has_upper = t.chars().any(|c| c.is_uppercase());
+   |                                   ^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `char::is_uppercase`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#redundant_closure_for_method_calls
+   = note: `-W clippy::redundant-closure-for-method-calls` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::redundant_closure_for_method_calls)]`
+
+warning: redundant closure
+  --> src/pasteboard.rs:83:35
+   |
+83 |     let has_lower = t.chars().any(|c| c.is_lowercase());
+   |                                   ^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `char::is_lowercase`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#redundant_closure_for_method_calls
+
+warning: redundant closure
+  --> src/pasteboard.rs:84:35
+   |
+84 |     let digits = t.chars().filter(|c| c.is_ascii_digit()).count();
+   |                                   ^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `char::is_ascii_digit`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#redundant_closure_for_method_calls
+
+warning: item in documentation is missing backticks
+  --> src/pasteboard.rs:94:61
+   |
+94 |     //! Accès au presse-papiers par les interfaces typées d'AppKit (objc2) :
+   |                                                             ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+   |
+94 -     //! Accès au presse-papiers par les interfaces typées d'AppKit (objc2) :
+94 +     //! Accès au presse-papiers par les interfaces typées d'`AppKit` (objc2) :
+   |
+
+warning: you should put bare URLs between `<`/`>` or make a proper Markdown link
+   --> src/pasteboard.rs:103:11
+    |
+103 |     /// « file:///.file/id=… », résolues ici en vrais chemins).
+    |           ^^^^^^^^^^^^^^^^ help: try: `<file:///.file/id>`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+
+warning: this function's return value is unnecessarily wrapped by `Option`
+   --> src/pasteboard.rs:144:5
+    |
+144 |     pub fn change_count() -> Option<isize> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unnecessary_wraps
+    = note: `-W clippy::unnecessary-wraps` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unnecessary_wraps)]`
+help: remove `Option` from the return type...
+    |
+144 -     pub fn change_count() -> Option<isize> {
+144 +     pub fn change_count() -> isize {
+    |
+help: ...and then remove the surrounding `Some()` from returning expressions
+    |
+145 ~         autoreleasepool(|_| {
+146 +             NSPasteboard::generalPasteboard().changeCount()
+147 +         })
+    |
+
+warning: item in documentation is missing backticks
+  --> src/platform.rs:16:23
+   |
+16 |     /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
+   |                       ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+   |
+16 -     /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
+16 +     /// L'application `AppKit` ; `None` hors du thread principal (AppKit l'interdit).
+   |
+
+warning: item in documentation is missing backticks
+  --> src/platform.rs:16:65
+   |
+16 |     /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
+   |                                                                 ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+   |
+16 -     /// L'application AppKit ; `None` hors du thread principal (AppKit l'interdit).
+16 +     /// L'application AppKit ; `None` hors du thread principal (`AppKit` l'interdit).
+   |
+
+warning: item in documentation is missing backticks
+  --> src/platform.rs:40:55
+   |
+40 |     /// Réaffiche l'app depuis n'importe quel thread (AppKit exige le thread principal).
+   |                                                       ^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+   |
+40 -     /// Réaffiche l'app depuis n'importe quel thread (AppKit exige le thread principal).
+40 +     /// Réaffiche l'app depuis n'importe quel thread (`AppKit` exige le thread principal).
+   |
+
+warning: item in documentation is missing backticks
+  --> src/platform.rs:81:78
+   |
+81 | /// Affiche la fenêtre, ou la masque si elle est déjà au premier plan (comme CopyQ).
+   |                                                                              ^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+help: try
+   |
+81 - /// Affiche la fenêtre, ou la masque si elle est déjà au premier plan (comme CopyQ).
+81 + /// Affiche la fenêtre, ou la masque si elle est déjà au premier plan (comme `CopyQ`).
+   |
+
+warning: more than 3 bools in a struct
+  --> src/settings.rs:10:1
+   |
+10 | / pub struct Settings {
+11 | |     /// Enregistrer aussi les copies marquées confidentielles (mots de passe).
+12 | |     /// Désactivé par défaut : c'est le choix le plus sûr.
+13 | |     pub save_passwords: bool,
+...  |
+31 | |     pub retention_days: u32,
+32 | | }
+   | |_^
+   |
+   = help: consider using a state machine or refactoring bools into two-variant enums
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#struct_excessive_bools
+   = note: `-W clippy::struct-excessive-bools` implied by `-W clippy::pedantic`
+   = help: to override `-W clippy::pedantic` add `#[allow(clippy::struct_excessive_bools)]`
+
+warning: casting `u64` to `u32` may truncate the value
+  --> src/settings.rs:46:27
+   |
+46 |             max_image_mp: (crate::media::MAX_PIXELS / 1_000_000) as u32,
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_truncation
+help: ... or use `try_from` and handle the error accordingly
+   |
+46 -             max_image_mp: (crate::media::MAX_PIXELS / 1_000_000) as u32,
+46 +             max_image_mp: u32::try_from(crate::media::MAX_PIXELS / 1_000_000),
+   |
+
+warning: called `map(<f>).unwrap_or_else(<g>)` on a `Result` value
+   --> src/settings.rs:114:22
+    |
+114 |               Ok(s) => serde_json::from_str::<Self>(&s)
+    |  ______________________^
+115 | |                 .map(|mut st| {
+116 | |                     st.clamp();
+117 | |                     st
+...   |
+121 | |                     Self::default()
+122 | |                 }),
+    | |__________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#map_unwrap_or
+help: try
+    |
+114 ~             Ok(s) => serde_json::from_str::<Self>(&s).map_or_else(|e| {
+115 ~                     log::warn!("réglages illisibles ({e}) : valeurs par défaut");
+116 +                     Self::default()
+117 +                 }, |mut st| {
+118 +                     st.clamp();
+119 +                     st
+120 ~                 }),
+    |
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+  --> src/single_instance.rs:53:5
+   |
+53 | /     match lock.try_lock() {
+54 | |         Ok(()) => {
+55 | |             // Une socket restée d'un arrêt brutal est obsolète : nous avons le verrou.
+56 | |             let _ = fs::remove_file(&socket_path);
+...  |
+69 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#single_match_else
+help: try
+   |
+53 ~     if let Ok(()) = lock.try_lock() {
+54 ~         // Une socket restée d'un arrêt brutal est obsolète : nous avons le verrou.
+55 +         let _ = fs::remove_file(&socket_path);
+56 +         let listener = UnixListener::bind(&socket_path)
+57 +             .map_err(|e| log::warn!("socket d'instance indisponible : {e}"))
+58 +             .ok();
+59 +         Instance::Primary(Primary {
+60 +             lock: Some(lock),
+61 +             listener,
+62 +         })
+63 +     } else {
+64 +         notify_running(&socket_path);
+65 +         Instance::Secondary
+66 +     }
+   |
+
+warning: this argument is passed by value, but not consumed in the function body
+   --> src/storage.rs:123:14
+    |
+123 |     db_path: PathBuf,
+    |              ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+    = note: `-W clippy::needless-pass-by-value` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::needless_pass_by_value)]`
+help: consider taking a reference instead
+    |
+123 |     db_path: &PathBuf,
+    |              +
+
+warning: this argument is passed by value, but not consumed in the function body
+   --> src/storage.rs:124:18
+    |
+124 |     legacy_json: Option<PathBuf>,
+    |                  ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+124 |     legacy_json: Option<&PathBuf>,
+    |                         +
+
+warning: this argument is passed by value, but not consumed in the function body
+   --> src/storage.rs:125:17
+    |
+125 |     images_dir: Option<PathBuf>,
+    |                 ^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+125 |     images_dir: Option<&PathBuf>,
+    |                        +
+
+warning: this argument is passed by value, but not consumed in the function body
+   --> src/storage.rs:127:9
+    |
+127 |     rx: Receiver<Cmd>,
+    |         ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+127 |     rx: &Receiver<Cmd>,
+    |         +
+
+warning: this argument is passed by value, but not consumed in the function body
+   --> src/storage.rs:128:12
+    |
+128 |     ready: Sender<Result<Vec<Item>, String>>,
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+128 |     ready: &Sender<Result<Vec<Item>, String>>,
+    |            +
+
+warning: it is more concise to loop over references to containers instead of using explicit iteration methods
+   --> src/storage.rs:157:16
+    |
+157 |     for cmd in rx.iter() {
+    |                ^^^^^^^^^ help: to write this more concisely, try: `&rx`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#explicit_iter_loop
+    = note: `-W clippy::explicit-iter-loop` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::explicit_iter_loop)]`
+
+warning: casting `i64` to `u64` may lose the sign of the value
+   --> src/storage.rs:324:28
+    |
+324 |                 copied_at: int(2).unwrap_or(0).max(0) as u64,
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, use `cast_unsigned()` instead: `int(2).unwrap_or(0).max(0).cast_unsigned()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_sign_loss
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/storage.rs:341:17
+    |
+341 | /                 match self.cipher().and_then(|c| c.decrypt(&row.text)) {
+342 | |                     Ok(plain) => plain,
+343 | |                     Err(_) => {
+344 | |                         undecryptable += 1;
+...   |
+347 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#single_match_else
+help: try
+    |
+341 ~                 if let Ok(plain) = self.cipher().and_then(|c| c.decrypt(&row.text)) { plain } else {
+342 +                     undecryptable += 1;
+343 +                     continue;
+344 +                 }
+    |
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/storage.rs:404:13
+    |
+404 | /             match &fingerprint {
+405 | |                 Some(fp) => {
+406 | |                     self.conn
+407 | |                         .execute("DELETE FROM items WHERE fingerprint = ?1", [fp.as_str()])
+...   |
+443 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#single_match_else
+help: try
+    |
+404 ~             if let Some(fp) = &fingerprint {
+405 +                 self.conn
+406 +                     .execute("DELETE FROM items WHERE fingerprint = ?1", [fp.as_str()])
+407 +                     .await
+408 +                     .map_err(|e| e.to_string())?;
+409 ~                 // Ancienne copie en clair du même texte (avant qu'il soit marqué).
+410 +                 self.conn
+411 +                     .execute("DELETE FROM items WHERE text = ?1", [item.text.as_str()])
+412 +                     .await
+413 +                     .map_err(|e| e.to_string())?;
+414 ~                 // copied_at est un entier que nous contrôlons : pas d'injection.
+415 +                 let sql = format!(
+416 +                     "INSERT INTO items (text, copied_at, sensitive, fingerprint, kind, meta) \
+417 +                      VALUES (?1, {}, 1, ?2, ?3, ?4)",
+418 +                     item.copied_at as i64
+419 +                 );
+420 +                 self.conn
+421 +                     .execute(&sql, [stored.as_str(), fp.as_str(), item.kind.as_str(), item.meta.as_str()])
+422 +                     .await
+423 +                     .map_err(|e| e.to_string())?;
+424 +             } else {
+425 +                 self.conn
+426 +                     .execute(
+427 +                         "DELETE FROM items WHERE text = ?1 AND kind = ?2",
+428 +                         [stored.as_str(), item.kind.as_str()],
+429 +                     )
+430 +                     .await
+431 +                     .map_err(|e| e.to_string())?;
+432 +                 let sql = format!(
+433 +                     "INSERT INTO items (text, copied_at, sensitive, kind, meta) VALUES (?1, {}, 0, ?2, ?3)",
+434 +                     item.copied_at as i64
+435 +                 );
+436 +                 self.conn
+437 +                     .execute(&sql, [stored.as_str(), item.kind.as_str(), item.meta.as_str()])
+438 +                     .await
+439 +                     .map_err(|e| e.to_string())?;
+440 +             }
+    |
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> src/storage.rs:419:25
+    |
+419 |                         item.copied_at as i64
+    |                         ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, use `cast_signed()` instead: `item.copied_at.cast_signed()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_wrap
+
+warning: casting `u64` to `i64` may wrap around the value
+   --> src/storage.rs:436:25
+    |
+436 |                         item.copied_at as i64
+    |                         ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, use `cast_signed()` instead: `item.copied_at.cast_signed()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_possible_wrap
+
+warning: `copyq-rs` (bin "copyq-rs") generated 86 warnings (run `cargo clippy --fix --bin "copyq-rs" -p copyq-rs -- -W clippy::pedantic` to apply 40 suggestions)
+warning: adding items after statements is confusing, since items exist from the start of the scope
+   --> src/clipboard.rs:477:9
+    |
+477 | /         fn test_cipher() -> Result<Arc<Cipher>, String> {
+478 | |             static C: std::sync::OnceLock<Arc<Cipher>> = std::sync::OnceLock::new();
+479 | |             Ok(
+480 | |                 C.get_or_init(|| Arc::new(Cipher::new(&crate::crypto::generate_key())))
+...   |
+483 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#items_after_statements
+
+warning: this function's return value is unnecessarily wrapped by `Result`
+   --> src/clipboard.rs:477:9
+    |
+477 |         fn test_cipher() -> Result<Arc<Cipher>, String> {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unnecessary_wraps
+    = note: `-W clippy::unnecessary-wraps` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::unnecessary_wraps)]`
+help: remove `Result` from the return type...
+    |
+477 -         fn test_cipher() -> Result<Arc<Cipher>, String> {
+477 +         fn test_cipher() -> std::sync::Arc<crypto::Cipher> {
+    |
+help: ...and then remove the surrounding `Ok()` from returning expressions
+    |
+479 ~             C.get_or_init(|| Arc::new(Cipher::new(&crate::crypto::generate_key())))
+480 +                     .clone()
+    |
+
+warning: used `assert!` to check that a value is empty
+   --> src/history.rs:808:9
+    |
+808 |         assert!(h.search("Ko").is_empty());
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assert_is_empty
+    = note: `-W clippy::assert-is-empty` implied by `-W clippy::pedantic`
+    = help: to override `-W clippy::pedantic` add `#[allow(clippy::assert_is_empty)]`
+help: use `assert_eq!` to show the value on failure
+    |
+808 -         assert!(h.search("Ko").is_empty());
+808 +         assert_eq!(h.search("Ko"), [] as [usize; 0]);
+    |
+
+warning: used `assert!` to check that a value is empty
+   --> src/history.rs:869:9
+    |
+869 |         assert!(h.search("absent").is_empty());
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assert_is_empty
+help: use `assert_eq!` to show the value on failure
+    |
+869 -         assert!(h.search("absent").is_empty());
+869 +         assert_eq!(h.search("absent"), [] as [usize; 0]);
+    |
+
+warning: this function's return value is unnecessarily wrapped by `Option`
+   --> src/pasteboard.rs:144:5
+    |
+144 |     pub fn change_count() -> Option<isize> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unnecessary_wraps
+help: remove `Option` from the return type...
+    |
+144 -     pub fn change_count() -> Option<isize> {
+144 +     pub fn change_count() -> isize {
+    |
+help: ...and then remove the surrounding `Some()` from returning expressions
+    |
+145 ~         autoreleasepool(|_| {
+146 +             NSPasteboard::generalPasteboard().changeCount()
+147 +         })
+    |
+
+warning: redundant closure
+   --> src/pasteboard.rs:185:26
+    |
+185 |         items.iter().map(|s| s.to_string()).collect()
+    |                          ^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `std::string::ToString::to_string`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#redundant_closure_for_method_calls
+
+warning: used `assert!` to check that a value is empty
+   --> src/storage.rs:542:13
+    |
+542 |             assert!(items.is_empty());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assert_is_empty
+help: use `assert_eq!` to show the value on failure
+    |
+542 -             assert!(items.is_empty());
+542 +             assert_eq!(items, [] as [history::Item; 0]);
+    |
+
+warning: used `assert!` to check that a value is empty
+   --> src/storage.rs:558:9
+    |
+558 |         assert!(items.is_empty());
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assert_is_empty
+help: use `assert_eq!` to show the value on failure
+    |
+558 -         assert!(items.is_empty());
+558 +         assert_eq!(items, [] as [history::Item; 0]);
+    |
+
+warning: `copyq-rs` (bin "copyq-rs" test) generated 93 warnings (85 duplicates) (run `cargo clippy --fix --bin "copyq-rs" -p copyq-rs --tests -- -W clippy::pedantic` to apply 5 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.56s
