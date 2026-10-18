@@ -113,7 +113,68 @@ pub(super) fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> eg
 }
 
 pub(super) fn caption(ui: &mut Ui, text: &str, p: &Palette) {
-    ui.add(egui::Label::new(RichText::new(text).size(11.5).color(p.text_faint)).wrap());
+    paragraph(ui, text, 11.5, p.text_faint);
+}
+
+/// Texte sur plusieurs lignes au besoin.
+///
+/// egui compose correctement une *ligne* d'arabe, mais coupe un paragraphe après
+/// l'avoir mis dans l'ordre visuel : les lignes sortent dans le désordre (la fin de la
+/// phrase en haut). Pour un texte de droite à gauche, on coupe donc nous-mêmes, dans
+/// l'ordre logique, et chaque ligne est affichée séparément.
+pub(super) fn paragraph(ui: &mut Ui, text: &str, size: f32, color: Color32) {
+    if !crate::i18n::starts_rtl(text) {
+        ui.add(egui::Label::new(RichText::new(text).size(size).color(color)).wrap());
+        return;
+    }
+    let font = FontId::proportional(size);
+    let width = ui.available_width().max(40.0);
+    let ctx = ui.ctx().clone();
+    let measure = |line: &str| {
+        ctx.fonts_mut(|f| {
+            f.layout_no_wrap(crate::i18n::rtl_line(line), font.clone(), color)
+                .size()
+                .x
+        })
+    };
+    let lines = break_lines(&crate::i18n::strip_marks(text), width, measure);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for line in lines {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(crate::i18n::rtl_line(&line))
+                        .size(size)
+                        .color(color),
+                )
+                .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        }
+    });
+}
+
+/// Coupe un texte en lignes, dans l'ordre logique, aux espaces, sans dépasser
+/// `width` (un mot plus long qu'une ligne reste seul sur la sienne). Les retours à la
+/// ligne du texte sont conservés.
+pub(super) fn break_lines(text: &str, width: f32, measure: impl Fn(&str) -> f32) -> Vec<String> {
+    let mut lines = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut line = String::new();
+        for word in paragraph.split(' ').filter(|w| !w.is_empty()) {
+            let candidate = if line.is_empty() {
+                word.to_string()
+            } else {
+                format!("{line} {word}")
+            };
+            if !line.is_empty() && measure(&candidate) > width {
+                lines.push(std::mem::replace(&mut line, word.to_string()));
+            } else {
+                line = candidate;
+            }
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 pub(super) fn ghost_button(ui: &mut Ui, text: &str, color: Color32, p: &Palette) -> egui::Response {
@@ -144,83 +205,91 @@ fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
 
 #[cfg(test)]
 mod tests {
-    use eframe::egui;
+    use super::*;
 
-    /// Diagnostic : pour chaque ligne, les caractères lus de droite à gauche (ordre
-    /// visuel), à comparer avec le texte logique.
-    fn rows_read_rtl(text: &str, wrap: f32) -> Option<Vec<String>> {
-        let bytes = [
+    #[test]
+    fn lines_are_broken_in_logical_order() {
+        // Largeur : 1 par caractère.
+        let w = |s: &str| s.chars().count() as f32;
+        assert_eq!(
+            break_lines("un deux trois quatre", 9.0, w),
+            vec!["un deux", "trois", "quatre"]
+        );
+        assert_eq!(break_lines("a\nb c", 10.0, w), vec!["a", "b c"]);
+        assert_eq!(
+            break_lines("immense", 3.0, w),
+            vec!["immense"],
+            "mot trop long"
+        );
+        let ar = "عند تجاوزه، يحذف الأقدم.";
+        let lines = break_lines(ar, 12.0, w);
+        assert_eq!(lines.join(" "), ar, "rien de perdu ni déplacé");
+        assert_eq!(lines[0], "عند تجاوزه،", "le début de la phrase en premier");
+    }
+
+    /// Sur un Mac (police arabe du système) : chaque ligne affichée par egui, lue de
+    /// droite à gauche, redonne bien le texte dans l'ordre.
+    #[test]
+    fn arabic_lines_read_right_to_left_in_order() {
+        let Some(bytes) = [
             "/System/Library/Fonts/SFArabic.ttf",
             "/System/Library/Fonts/GeezaPro.ttc",
         ]
         .iter()
-        .find_map(|p| std::fs::read(p).ok())?;
+        .find_map(|p| std::fs::read(p).ok()) else {
+            return;
+        };
         let ctx = egui::Context::default();
         let mut fonts = egui::FontDefinitions::default();
         fonts.font_data.insert(
-            "arabic".into(),
+            "ar".into(),
             std::sync::Arc::new(egui::FontData::from_owned(bytes)),
         );
         fonts
             .families
             .get_mut(&egui::FontFamily::Proportional)
             .unwrap()
-            .insert(0, "arabic".into());
+            .insert(0, "ar".into());
         ctx.set_fonts(fonts);
         let mut frame = ctx.run_ui(Default::default(), |_| {});
         frame.textures_delta.clear();
-        let galley = ctx.fonts_mut(|f| {
-            f.layout(
-                text.to_owned(),
-                egui::FontId::proportional(14.0),
-                egui::Color32::WHITE,
-                wrap,
-            )
-        });
-        Some(
-            galley
+        let font = FontId::proportional(14.0);
+        let measure = |s: &str| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(crate::i18n::rtl_line(s), font.clone(), Color32::WHITE)
+                    .size()
+                    .x
+            })
+        };
+        let text = "يلصق العنصر المختار مباشرة في التطبيق الذي فتحت منه السجل.";
+        let lines = break_lines(text, 160.0, measure);
+        assert!(lines.len() > 1, "{lines:?}");
+        let mut read = Vec::new();
+        for line in &lines {
+            let galley = ctx.fonts_mut(|f| {
+                f.layout_no_wrap(crate::i18n::rtl_line(line), font.clone(), Color32::WHITE)
+            });
+            let mut glyphs: Vec<(char, f32)> = galley
                 .rows
                 .iter()
-                .map(|r| {
-                    let mut g: Vec<(char, f32, f32)> = r
-                        .glyphs
-                        .iter()
-                        .filter(|g| g.advance_width > 0.01 || g.chr == ' ')
-                        .map(|g| (g.chr, g.pos.x, g.advance_width))
-                        .collect();
-                    g.sort_by(|a, b| b.1.total_cmp(&a.1));
-                    let s: String = g.iter().map(|x| x.0).collect();
-                    format!(
-                        "[{} glyphes, x {:.0}..{:.0}] {s}",
-                        g.len(),
-                        g.last().map_or(0.0, |x| x.1),
-                        g.first().map_or(0.0, |x| x.1)
-                    )
-                })
-                .collect(),
-        )
-    }
-
-    #[test]
-    fn diagnostic_bidi() {
-        let mut out = String::new();
-        let samples = [
-            ("مسح الكل", 1000.0),
-            ("\u{200F}عند تجاوزه، يُحذف الأقدم.\u{200F}", 1000.0),
-            (
-                "\u{200F}يُلصق العنصر المختار مباشرةً في التطبيق الذي فتحت منه السجل (⌘⇧Z).\u{200F}",
-                200.0,
-            ),
-        ];
-        for (text, wrap) in samples {
-            let Some(rows) = rows_read_rtl(text, wrap) else {
-                return;
-            };
-            out += &format!("\nTEXTE {text:?}");
-            for r in rows {
-                out += &format!("\n  {r}");
-            }
+                .flat_map(|r| r.glyphs.iter())
+                .filter(|g| g.advance_width > 0.01 || g.chr == ' ')
+                .map(|g| (g.chr, g.pos.x))
+                .collect();
+            glyphs.sort_by(|a, b| b.1.total_cmp(&a.1));
+            read.push(
+                glyphs
+                    .iter()
+                    .map(|g| g.0)
+                    .collect::<String>()
+                    .trim()
+                    .to_string(),
+            );
         }
-        panic!("DIAG{out}");
+        assert_eq!(
+            read.join(" "),
+            text,
+            "lignes lues de droite à gauche : {read:?}"
+        );
     }
 }
