@@ -1,13 +1,15 @@
 //! Panneau « Réglages » : onglets Général et Limites.
 
-use super::widgets::{caption, column, ghost_button, hstack, hwrap, toggle, trailing};
+use super::widgets::{
+    caption, column, ghost_button, hstack, hwrap, paragraph, toggle, trailing, wt,
+};
 use super::{CopyApp, SettingsTab};
 use crate::history;
 use crate::logging::LockExt;
 use crate::settings;
 use crate::theme::Palette;
 use crate::{i18n, login_item, paste, storage};
-use eframe::egui::{self, Color32, RichText, Stroke, Ui};
+use eframe::egui::{self, Color32, Stroke, Ui};
 use std::sync::atomic::Ordering;
 
 impl CopyApp {
@@ -20,23 +22,14 @@ impl CopyApp {
     fn settings_body(&mut self, ui: &mut Ui, p: &Palette) {
         ui.spacing_mut().item_spacing.y = 4.0;
         hstack(ui, |ui| {
-            ui.label(
-                RichText::new(t!("settings.title"))
-                    .size(13.5)
-                    .color(p.text)
-                    .strong(),
-            );
+            ui.label(wt(t!("settings.title"), 13.5, p.text));
             ui.with_layout(trailing(), |ui| {
                 for (tab, label) in [
                     (SettingsTab::Limits, t!("settings.tab_limits")),
                     (SettingsTab::General, t!("settings.tab_general")),
                 ] {
                     let active = self.settings_tab == tab;
-                    let text = RichText::new(label).size(12.5).color(if active {
-                        p.accent
-                    } else {
-                        p.text_muted
-                    });
+                    let text = wt(label, 12.5, if active { p.accent } else { p.text_muted });
                     let button = egui::Button::new(text)
                         .fill(if active {
                             p.accent_soft
@@ -69,7 +62,7 @@ impl CopyApp {
             .unwrap_or_else(|| self.settings.clone());
         let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
             hstack(ui, |ui| {
-                ui.label(RichText::new(label).size(12.5).color(p.text));
+                ui.label(wt(label, 12.5, p.text));
                 ui.with_layout(trailing(), |ui| {
                     // Champs bien visibles : cadre, largeur minimale.
                     let v = ui.visuals_mut();
@@ -114,11 +107,13 @@ impl CopyApp {
             t!("limits.text_size"),
             t!("limits.text_size_help"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_kb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_text_kb)
                         .range(settings::TEXT_KB_RANGE)
                         .speed(10.0)
-                        .suffix(t!("limits.unit_kb")),
+                        .suffix(unit_suffix(t!("limits.unit_kb"))),
                 );
             },
         );
@@ -127,11 +122,13 @@ impl CopyApp {
             t!("limits.total_size"),
             t!("limits.oldest_deleted"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_mb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_total_mb)
                         .range(settings::TOTAL_MB_RANGE)
                         .speed(5.0)
-                        .suffix(t!("limits.unit_mb")),
+                        .suffix(unit_suffix(t!("limits.unit_mb"))),
                 );
             },
         );
@@ -140,10 +137,12 @@ impl CopyApp {
             t!("limits.image_size"),
             t!("limits.image_size_help"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_mpx"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_image_mp)
                         .range(settings::IMAGE_MP_RANGE)
-                        .suffix(t!("limits.unit_mpx")),
+                        .suffix(unit_suffix(t!("limits.unit_mpx"))),
                 );
             },
         );
@@ -153,10 +152,14 @@ impl CopyApp {
             t!("limits.retention_help"),
             &mut |ui| {
                 egui::ComboBox::from_id_salt("retention")
-                    .selected_text(settings::retention_label(draft.retention_days))
+                    .selected_text(wt(
+                        &settings::retention_label(draft.retention_days),
+                        13.0,
+                        p.text,
+                    ))
                     .show_ui(ui, |ui| {
                         for days in settings::RETENTION_CHOICES {
-                            let label = settings::retention_label(days);
+                            let label = wt(&settings::retention_label(days), 13.0, p.text);
                             ui.selectable_value(&mut draft.retention_days, days, label);
                         }
                     });
@@ -174,10 +177,9 @@ impl CopyApp {
             }
             ui.with_layout(trailing(), |ui| {
                 if pending {
-                    let apply =
-                        egui::Button::new(RichText::new(t!("limits.apply")).color(Color32::WHITE))
-                            .fill(p.accent)
-                            .corner_radius(7.0);
+                    let apply = egui::Button::new(wt(t!("limits.apply"), 13.0, Color32::WHITE))
+                        .fill(p.accent)
+                        .corner_radius(7.0);
                     if ui.add(apply).clicked() {
                         self.settings = draft.clone();
                         let removed = self.apply_limits();
@@ -200,11 +202,7 @@ impl CopyApp {
                 .lock_safe()
                 .would_remove(draft.limits(), history::now_secs());
             if n > 0 {
-                ui.label(
-                    RichText::new(t!("limits.will_remove", n = n))
-                        .size(11.5)
-                        .color(p.danger),
-                );
+                ui.label(wt(&t!("limits.will_remove", n = n), 11.5, p.danger));
             }
         }
         self.limits_draft = Some(draft);
@@ -233,11 +231,7 @@ impl CopyApp {
         caption(ui, t!("general.auto_paste_help"), p);
         if self.settings.auto_paste && !paste::is_trusted() {
             hwrap(ui, |ui| {
-                ui.label(
-                    RichText::new(t!("general.accessibility_needed"))
-                        .size(11.5)
-                        .color(p.danger),
-                );
+                ui.label(wt(t!("general.accessibility_needed"), 11.5, p.danger));
                 if ghost_button(ui, t!("general.open_settings"), p.accent, p).clicked() {
                     paste::open_accessibility_settings();
                 }
@@ -345,13 +339,11 @@ impl CopyApp {
             self.reclassify();
         }
         if let Some(err) = storage::encryption_error() {
-            ui.add(
-                egui::Label::new(
-                    RichText::new(t!("general.keychain_error", error = err))
-                        .size(11.5)
-                        .color(p.danger),
-                )
-                .wrap(),
+            paragraph(
+                ui,
+                &t!("general.keychain_error", error = err),
+                11.5,
+                p.danger,
             );
         }
         let stored = self.history.lock_safe().sensitive_count();
@@ -380,25 +372,21 @@ impl CopyApp {
         };
         let before = self.settings.language.clone();
         hstack(ui, |ui| {
-            ui.label(
-                RichText::new(t!("settings.language"))
-                    .size(12.5)
-                    .color(p.text_muted),
-            );
+            ui.label(wt(t!("settings.language"), 12.5, p.text_muted));
             ui.with_layout(trailing(), |ui| {
                 egui::ComboBox::from_id_salt("language")
-                    .selected_text(label(&self.settings.language))
+                    .selected_text(wt(&label(&self.settings.language), 13.0, p.text))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.settings.language,
                             settings::AUTO_LANGUAGE.to_string(),
-                            label(settings::AUTO_LANGUAGE),
+                            wt(&label(settings::AUTO_LANGUAGE), 13.0, p.text),
                         );
                         for lang in i18n::ALL {
                             ui.selectable_value(
                                 &mut self.settings.language,
                                 lang.code().to_string(),
-                                lang.native_name(),
+                                wt(lang.native_name(), 13.0, p.text),
                             );
                         }
                     });
@@ -410,5 +398,21 @@ impl CopyApp {
             self.apply_language(&ctx);
         }
         changed
+    }
+}
+
+/// Unité après un nombre (« 1000 Ko »). En arabe, egui ne compose pas le suffixe d'un
+/// champ numérique de droite à gauche : l'unité est alors un libellé à part.
+fn unit_suffix(unit: &str) -> String {
+    if i18n::is_rtl() {
+        String::new()
+    } else {
+        unit.to_string()
+    }
+}
+
+fn unit_label(ui: &mut Ui, unit: &str, color: Color32) {
+    if i18n::is_rtl() {
+        ui.label(wt(unit.trim(), 12.5, color));
     }
 }

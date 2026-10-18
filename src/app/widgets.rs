@@ -1,12 +1,57 @@
-//! Petits composants d'interface réutilisables (interrupteur, touches, légendes…).
+//! Petits composants d'interface réutilisables (interrupteur, touches, légendes…), et
+//! affichage des textes de droite à gauche (arabe).
 
+use crate::i18n;
 use crate::theme::Palette;
 use eframe::egui::{
-    self, text::LayoutJob, text::TextWrapping, Color32, CornerRadius, FontId, Frame, Margin,
-    RichText, Sense, Stroke, Ui,
+    self, text::LayoutJob, text::TextWrapping, Color32, CornerRadius, FontFamily, FontId, Frame,
+    Margin, RichText, Sense, Stroke, Ui, WidgetText,
 };
 use std::sync::Arc;
 
+/// Famille de polices où la police arabe passe en premier (voir `theme`) : un mot arabe,
+/// ses espaces et sa ponctuation arabe restent ainsi d'un seul tenant pour egui.
+pub(crate) const RTL_FAMILY: &str = "rtl";
+
+/// Faut-il composer ce texte de droite à gauche ?
+fn needs_bidi(text: &str) -> bool {
+    i18n::has_rtl(text)
+}
+
+/// Une ligne de texte prête pour egui : les morceaux (`i18n::visual_pieces`) dans
+/// l'ordre visuel, l'arabe dans la famille `RTL_FAMILY`, le reste dans la police normale.
+pub(super) fn bidi_job(text: &str, size: f32, color: Color32) -> LayoutJob {
+    bidi_job_with_base(text, size, color, i18n::is_rtl() || i18n::starts_rtl(text))
+}
+
+fn bidi_job_with_base(text: &str, size: f32, color: Color32, rtl_base: bool) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    for piece in i18n::visual_pieces(text, rtl_base) {
+        let family = if piece.arabic {
+            FontFamily::Name(RTL_FAMILY.into())
+        } else {
+            FontFamily::Proportional
+        };
+        job.append(
+            &piece.text,
+            0.0,
+            egui::TextFormat::simple(FontId::new(size, family), color),
+        );
+    }
+    job
+}
+
+/// Texte d'un widget (libellé, bouton, info-bulle…) : tel quel, ou composé de droite
+/// à gauche s'il contient de l'arabe.
+pub(super) fn wt(text: &str, size: f32, color: Color32) -> WidgetText {
+    if needs_bidi(text) {
+        bidi_job(text, size, color).into()
+    } else {
+        RichText::new(text).size(size).color(color).into()
+    }
+}
+
+/// Une ligne, tronquée (« … ») si elle dépasse `max_width`.
 pub(super) fn single_line(
     ui: &Ui,
     text: &str,
@@ -14,12 +59,40 @@ pub(super) fn single_line(
     color: Color32,
     max_width: f32,
 ) -> Arc<egui::Galley> {
-    let mut job = LayoutJob::single_section(
-        text.to_owned(),
-        egui::TextFormat::simple(FontId::proportional(size), color),
-    );
-    job.wrap = TextWrapping::truncate_at_width(max_width);
-    ui.painter().layout_job(job)
+    if !needs_bidi(text) {
+        let mut job = LayoutJob::single_section(
+            text.to_owned(),
+            egui::TextFormat::simple(FontId::proportional(size), color),
+        );
+        job.wrap = TextWrapping::truncate_at_width(max_width);
+        return ui.painter().layout_job(job);
+    }
+    // De droite à gauche : on raccourcit le texte par la fin *logique* (egui couperait
+    // la fin visuelle, c'est-à-dire le début de la phrase).
+    let layout = |s: &str| ui.painter().layout_job(bidi_job(s, size, color));
+    let full = layout(text);
+    if full.size().x <= max_width {
+        return full;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let (mut lo, mut hi) = (0, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        let candidate: String = chars[..mid].iter().collect::<String>() + "…";
+        if layout(&candidate).size().x <= max_width {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    layout(
+        &(chars[..lo]
+            .iter()
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+            + "…"),
+    )
 }
 
 /// Ligne horizontale dans le sens de lecture : de droite à gauche en arabe.
@@ -79,9 +152,9 @@ pub(super) fn empty_state(ui: &mut Ui, history_empty: bool, query: &str, p: &Pal
         };
         ui.label(RichText::new(icon).size(34.0).color(p.text_faint));
         ui.add_space(8.0);
-        ui.label(RichText::new(title).size(15.0).color(p.text));
+        ui.label(wt(&title, 15.0, p.text));
         ui.add_space(2.0);
-        ui.label(RichText::new(subtitle).size(12.5).color(p.text_muted));
+        ui.label(wt(&subtitle, 12.5, p.text_muted));
     });
 }
 
@@ -89,9 +162,7 @@ pub(super) fn empty_state(ui: &mut Ui, history_empty: bool, query: &str, p: &Pal
 pub(super) fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> egui::Response {
     let size = egui::vec2(30.0, 18.0);
     let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
-    let label_resp = ui.add(
-        egui::Label::new(RichText::new(label).size(12.5).color(p.text_muted)).sense(Sense::click()),
-    );
+    let label_resp = ui.add(egui::Label::new(wt(label, 12.5, p.text_muted)).sense(Sense::click()));
     if resp.clicked() || label_resp.clicked() {
         *on = !*on;
         resp.mark_changed();
@@ -113,13 +184,59 @@ pub(super) fn toggle(ui: &mut Ui, on: &mut bool, label: &str, p: &Palette) -> eg
 }
 
 pub(super) fn caption(ui: &mut Ui, text: &str, p: &Palette) {
-    ui.add(egui::Label::new(RichText::new(text).size(11.5).color(p.text_faint)).wrap());
+    paragraph(ui, text, 11.5, p.text_faint);
+}
+
+/// Texte sur plusieurs lignes au besoin.
+///
+/// Un texte avec de l'arabe est coupé ici en lignes, dans l'ordre logique, et chaque
+/// ligne est composée à part (`bidi_job`) : egui couperait le paragraphe tel qu'il le
+/// pose, de gauche à droite, et la fin de la phrase se retrouverait en haut.
+pub(super) fn paragraph(ui: &mut Ui, text: &str, size: f32, color: Color32) {
+    if !needs_bidi(text) {
+        ui.add(egui::Label::new(RichText::new(text).size(size).color(color)).wrap());
+        return;
+    }
+    let width = ui.available_width().max(40.0);
+    let painter = ui.painter().clone();
+    let measure = |line: &str| painter.layout_job(bidi_job(line, size, color)).size().x;
+    let lines = break_lines(text, width, measure);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for line in lines {
+            ui.add(egui::Label::new(wt(&line, size, color)).wrap_mode(egui::TextWrapMode::Extend));
+        }
+    });
+}
+
+/// Coupe un texte en lignes, dans l'ordre logique, aux espaces, sans dépasser
+/// `width` (un mot plus long qu'une ligne reste seul sur la sienne). Les retours à la
+/// ligne du texte sont conservés.
+pub(super) fn break_lines(text: &str, width: f32, measure: impl Fn(&str) -> f32) -> Vec<String> {
+    let mut lines = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut line = String::new();
+        for word in paragraph.split(' ').filter(|w| !w.is_empty()) {
+            let candidate = if line.is_empty() {
+                word.to_string()
+            } else {
+                format!("{line} {word}")
+            };
+            if !line.is_empty() && measure(&candidate) > width {
+                lines.push(std::mem::replace(&mut line, word.to_string()));
+            } else {
+                line = candidate;
+            }
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 pub(super) fn ghost_button(ui: &mut Ui, text: &str, color: Color32, p: &Palette) -> egui::Response {
     let _ = p;
     ui.add(
-        egui::Button::new(RichText::new(text).size(12.5).color(color))
+        egui::Button::new(wt(text, 12.5, color))
             .fill(Color32::TRANSPARENT)
             .corner_radius(7.0),
     )
@@ -133,11 +250,124 @@ pub(super) fn kbd(ui: &mut Ui, key: &str, p: &Palette) {
         .corner_radius(4.0)
         .inner_margin(Margin::symmetric(5, 1))
         .show(ui, |ui| {
-            ui.label(RichText::new(key).size(11.0).color(p.text_muted));
+            ui.label(wt(key, 11.0, p.text_muted));
         });
 }
 
 fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lines_are_broken_in_logical_order() {
+        // Largeur : 1 par caractère.
+        let w = |s: &str| s.chars().count() as f32;
+        assert_eq!(
+            break_lines("un deux trois quatre", 9.0, w),
+            vec!["un deux", "trois", "quatre"]
+        );
+        assert_eq!(break_lines("a\nb c", 10.0, w), vec!["a", "b c"]);
+        assert_eq!(
+            break_lines("immense", 3.0, w),
+            vec!["immense"],
+            "mot trop long"
+        );
+        let ar = "عند تجاوزه، يحذف الأقدم.";
+        let lines = break_lines(ar, 12.0, w);
+        assert_eq!(lines.join(" "), ar, "rien de perdu ni déplacé");
+        assert_eq!(lines[0], "عند تجاوزه،", "le début de la phrase en premier");
+    }
+
+    /// Contexte egui avec les polices de l'app (police système, arabe…), sur un Mac.
+    fn mac_ctx() -> Option<egui::Context> {
+        if !std::path::Path::new("/System/Library/Fonts/SFArabic.ttf").exists() {
+            return None;
+        }
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx, crate::i18n::Lang::Ar);
+        let mut frame = ctx.run_ui(Default::default(), |_| {});
+        frame.textures_delta.clear();
+        Some(ctx)
+    }
+
+    /// Caractères d'une ligne dessinée par egui, lus de droite à gauche.
+    fn read_rtl(ctx: &egui::Context, line: &str) -> String {
+        let job = bidi_job_with_base(line, 12.0, Color32::WHITE, true);
+        let galley = ctx.fonts_mut(|f| f.layout_job(job));
+        let mut glyphs: Vec<(char, f32)> = galley
+            .rows
+            .iter()
+            .flat_map(|r| r.glyphs.iter())
+            .filter(|g| g.advance_width > 0.01)
+            .map(|g| (g.chr, g.pos.x))
+            .collect();
+        glyphs.sort_by(|a, b| b.1.total_cmp(&a.1));
+        glyphs.iter().map(|g| g.0).collect()
+    }
+
+    /// Avec les vraies polices de l'app (sur un Mac) : chaque traduction arabe et des
+    /// textes mêlant arabe, chiffres et latin, coupés en lignes puis dessinés par egui,
+    /// se lisent de droite à gauche dans l'ordre. On compare les lettres arabes (une
+    /// ligature comme لا ne donne qu'un glyphe pour deux lettres : sous-suite ordonnée).
+    #[test]
+    fn arabic_text_reads_right_to_left_in_order() {
+        let Some(ctx) = mac_ctx() else { return };
+        let width = |s: &str| {
+            let job = bidi_job_with_base(s, 12.0, Color32::WHITE, true);
+            ctx.fonts_mut(|f| f.layout_job(job)).size().x
+        };
+        let letters = |s: &str| -> String {
+            s.chars()
+                .filter(|c| matches!(*c as u32, 0x0621..=0x064A))
+                .collect()
+        };
+        let ar: std::collections::HashMap<String, String> =
+            serde_json::from_str(include_str!("../../locales/ar.json")).unwrap();
+        let mut texts: Vec<(String, String)> = ar.into_iter().collect();
+        for sample in [
+            "يلصق العنصر المختار مباشرة في التطبيق الذي فتحت منه السجل.",
+            "رقم الطلب 12345 — Order ID: AB-77",
+            "مرحبا بكم في الحافظة",
+        ] {
+            texts.push(("exemple".into(), sample.into()));
+        }
+        let mut multi_line = 0;
+        for (key, text) in &texts {
+            let lines = break_lines(text, 200.0, width);
+            multi_line += usize::from(lines.len() > 1);
+            let read: String = lines.iter().map(|l| read_rtl(&ctx, l)).collect();
+            let (got, want) = (letters(&read), letters(text));
+            let mut expected = want.chars();
+            let in_order = got.chars().all(|c| expected.any(|e| e == c));
+            assert!(
+                in_order && got.chars().count() * 10 >= want.chars().count() * 7,
+                "{key} : « {text} » mal ordonné (lu « {got} », lignes {lines:?})"
+            );
+        }
+        assert!(
+            multi_line >= 5,
+            "des textes sur plusieurs lignes sont testés"
+        );
+        // Le latin garde son sens : « CopyQ » se lit de gauche à droite.
+        let job = bidi_job_with_base("هل ما زال CopyQ يعمل؟", 12.0, Color32::WHITE, true);
+        let galley = ctx.fonts_mut(|f| f.layout_job(job));
+        let x = |c: char| {
+            galley
+                .rows
+                .iter()
+                .flat_map(|r| r.glyphs.iter())
+                .find(|g| g.chr == c)
+                .map(|g| g.pos.x)
+                .unwrap()
+        };
+        assert!(x('C') < x('o') && x('o') < x('p') && x('p') < x('Q'));
+        // Ponctuation de fin de phrase à gauche (fin de la lecture).
+        let read = read_rtl(&ctx, "عند تجاوزه، يحذف الأقدم.");
+        assert!(read.ends_with('.'), "{read}");
+    }
 }

@@ -6,7 +6,7 @@ use crate::logging::LockExt;
 use crate::media::{self, Variant};
 use crate::theme::Palette;
 use crate::{icons, keychain};
-use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, Sense, Stroke, StrokeKind, Ui};
 use std::collections::HashSet;
 use std::sync::{Mutex, Once};
 use unicode_normalization::UnicodeNormalization;
@@ -215,7 +215,7 @@ pub(super) fn row_ui(
         let del = ui
             .interact(action_rect, resp.id.with("delete"), Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text(t!("row.delete"));
+            .on_hover_text(super::widgets::wt(t!("row.delete"), 12.5, p.text));
         if del.hovered() {
             painter.rect_filled(action_rect, 7.0, p.danger.gamma_multiply(0.15));
         }
@@ -236,11 +236,15 @@ pub(super) fn row_ui(
         let lock = (row.item_kind == ItemKind::Text).then(|| {
             ui.interact(lock_rect, resp.id.with("lock"), Sense::click())
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text(if row.sensitive {
-                    t!("row.unmark_password")
-                } else {
-                    t!("row.mark_password")
-                })
+                .on_hover_text(super::widgets::wt(
+                    if row.sensitive {
+                        t!("row.unmark_password")
+                    } else {
+                        t!("row.mark_password")
+                    },
+                    12.5,
+                    p.text,
+                ))
         });
         if let Some(lock) = lock {
             if lock.hovered() {
@@ -275,7 +279,7 @@ pub(super) fn row_ui(
                 tex.id(),
                 egui::vec2(w as f32, h as f32) * scale,
             )));
-            ui.label(RichText::new(&row.detail).size(11.5));
+            ui.label(super::widgets::wt(&row.detail, 11.5, p.text));
             return;
         }
         let text = if row.sensitive {
@@ -283,7 +287,8 @@ pub(super) fn row_ui(
         } else {
             tooltip(hist, row.index)
         };
-        ui.label(RichText::new(text).size(12.5));
+        let color = ui.visuals().text_color();
+        super::widgets::paragraph(ui, &text, 12.5, color);
     });
     action
 }
@@ -351,7 +356,7 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
         title: if it.sensitive {
             "••••••••••••".to_string()
         } else {
-            crate::i18n::display_dir(&history::preview(&it.text, PREVIEW_CHARS)).into_owned()
+            history::preview(&it.text, PREVIEW_CHARS)
         },
         kind: if it.sensitive {
             Kind::Secret

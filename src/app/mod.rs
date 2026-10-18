@@ -8,6 +8,8 @@ mod row;
 mod settings_panel;
 mod widgets;
 
+pub(crate) use widgets::RTL_FAMILY;
+
 use crate::history::{self, History};
 use crate::logging::LockExt;
 use crate::settings::{self, Settings};
@@ -19,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use widgets::{empty_state, ghost_button, hstack, hwrap, kbd, toggle, trailing};
+use widgets::{empty_state, ghost_button, hstack, hwrap, kbd, toggle, trailing, wt};
 
 const SETTINGS_POPUP: &str = "settings_popup";
 /// Hauteur réservée en haut pour les boutons de fenêtre macOS (barre de titre transparente).
@@ -516,7 +518,7 @@ impl CopyApp {
                 .margin(Margin::symmetric(4, 2))
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
-                .hint_text(RichText::new(t!("search.hint")).color(p.text_faint))
+                .hint_text(wt(t!("search.hint"), 16.0, p.text_faint))
                 .align(if i18n::is_rtl() {
                     Align2::RIGHT_CENTER
                 } else {
@@ -554,7 +556,7 @@ impl CopyApp {
                 hstack(ui, |ui| {
                     let mut paused = self.shared.paused.load(Ordering::Relaxed);
                     if toggle(ui, &mut paused, t!("footer.pause"), p)
-                        .on_hover_text(t!("footer.pause_tip"))
+                        .on_hover_text(wt(t!("footer.pause_tip"), 12.5, p.text))
                         .changed()
                     {
                         self.shared.paused.store(paused, Ordering::Relaxed);
@@ -574,10 +576,9 @@ impl CopyApp {
             if ghost_button(ui, t!("footer.cancel"), p.text_muted, p).clicked() {
                 self.confirm_clear = false;
             }
-            let confirm =
-                egui::Button::new(RichText::new(t!("footer.delete_all")).color(Color32::WHITE))
-                    .fill(p.danger)
-                    .corner_radius(7.0);
+            let confirm = egui::Button::new(wt(t!("footer.delete_all"), 13.0, Color32::WHITE))
+                .fill(p.danger)
+                .corner_radius(7.0);
             if ui.add(confirm).clicked() {
                 self.clear_all();
                 self.confirm_clear = false;
@@ -613,7 +614,7 @@ impl CopyApp {
                 ("esc", t!("keys.close")),
             ] {
                 kbd(ui, key, p);
-                ui.label(RichText::new(label).size(11.5).color(p.text_faint));
+                ui.label(wt(label, 11.5, p.text_faint));
                 ui.add_space(6.0);
             }
         });
@@ -711,11 +712,7 @@ impl CopyApp {
                                     .size(10.0)
                                     .color(dot.gamma_multiply(alpha)),
                             );
-                            ui.label(
-                                RichText::new(toast.message.as_str())
-                                    .size(13.0)
-                                    .color(p.bg.gamma_multiply(alpha)),
-                            );
+                            ui.label(wt(&toast.message, 13.0, p.bg.gamma_multiply(alpha)));
                         });
                     });
             });

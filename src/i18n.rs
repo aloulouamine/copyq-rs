@@ -191,19 +191,17 @@ fn preferred_languages() -> Vec<String> {
 
 type Table = HashMap<&'static str, &'static str>;
 
+/// Textes tels qu'écrits (ordre logique).
 fn tables() -> &'static [Table] {
     static TABLES: OnceLock<Vec<Table>> = OnceLock::new();
     TABLES.get_or_init(|| ALL.iter().map(|l| parse(*l)).collect())
 }
 
-/// Marque de droite à gauche (U+200F, invisible).
+/// Marques de direction (invisibles) : droite à gauche, gauche à droite.
 const RLM: char = '\u{200F}';
+const LRM: char = '\u{200E}';
 
 /// Lit un fichier de langue ; les textes vivent jusqu'à la fin du programme.
-///
-/// Écriture de droite à gauche : chaque texte est encadré de marques RLM. egui met en
-/// forme l'arabe mais compose la ligne de gauche à droite ; sans ces marques, la
-/// ponctuation de début ou de fin (« . », « ⚠ », « (⌘⇧Z) ») se retrouve du mauvais côté.
 fn parse(lang: Lang) -> Table {
     let map: HashMap<String, String> = serde_json::from_str(lang.source()).unwrap_or_else(|e| {
         log::error!("fichier de langue invalide : {e}");
@@ -211,11 +209,6 @@ fn parse(lang: Lang) -> Table {
     });
     map.into_iter()
         .map(|(k, v)| {
-            let v = if lang.is_rtl() && !k.starts_with("num.") {
-                format!("{RLM}{v}{RLM}")
-            } else {
-                v
-            };
             let k: &'static str = Box::leak(k.into_boxed_str());
             let v: &'static str = Box::leak(v.into_boxed_str());
             (k, v)
@@ -223,14 +216,17 @@ fn parse(lang: Lang) -> Table {
         .collect()
 }
 
-/// Texte d'une clé dans une langue donnée (secours : anglais, puis la clé elle-même).
-pub fn tr_in(lang: Lang, key: &'static str) -> &'static str {
-    let t = tables();
-    t[lang.index()]
+fn lookup(tables: &'static [Table], lang: Lang, key: &'static str) -> &'static str {
+    tables[lang.index()]
         .get(key)
-        .or_else(|| t[Lang::En.index()].get(key))
+        .or_else(|| tables[Lang::En.index()].get(key))
         .copied()
         .unwrap_or(key)
+}
+
+/// Texte d'une clé (secours : anglais, puis la clé elle-même).
+pub fn tr_in(lang: Lang, key: &'static str) -> &'static str {
+    lookup(tables(), lang, key)
 }
 
 pub fn tr(key: &'static str) -> &'static str {
@@ -250,18 +246,105 @@ pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
     fill(tr(key), args)
 }
 
-/// Texte de l'utilisateur prêt à afficher : s'il commence par de l'arabe (ou de
-/// l'hébreu…), il est encadré de marques RLM pour que egui le compose de droite à
-/// gauche, ponctuation et chiffres compris. Sinon, inchangé.
-pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
-    let first_strong = text.chars().find(|c| c.is_alphabetic());
-    let rtl = first_strong
-        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF));
-    if rtl {
-        format!("{RLM}{text}{RLM}").into()
-    } else {
-        text.into()
+/// Morceau de texte à dessiner : les morceaux sont dans l'ordre visuel, de gauche à
+/// droite. `arabic` : écriture de droite à gauche, que egui met en forme et retourne
+/// lui-même (à composer avec une police arabe en tête, pour qu'il reste d'un seul tenant).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Piece {
+    pub text: String,
+    pub arabic: bool,
+}
+
+/// Lettres et signes des écritures de droite à gauche (arabe, hébreu…).
+pub fn is_rtl_char(c: char) -> bool {
+    matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
+}
+
+pub fn has_rtl(text: &str) -> bool {
+    text.chars().any(is_rtl_char)
+}
+
+/// Découpe une ligne en morceaux dans l'ordre visuel (algorithme bidirectionnel
+/// d'Unicode).
+///
+/// egui ne connaît pas le sens d'écriture : il coupe le texte par police, met en forme
+/// chaque morceau (harfrust retourne alors un morceau arabe) et pose les morceaux de
+/// gauche à droite dans l'ordre reçu. Une phrase arabe dont les espaces ou la
+/// ponctuation viennent d'une autre police sortirait donc mot par mot dans le désordre.
+/// On lui donne ici les morceaux déjà rangés : les passages de droite à gauche sont
+/// découpés en mots arabes (espaces compris) et en signes isolés, dont on inverse
+/// l'ordre et dont on retourne les parenthèses et guillemets.
+pub fn visual_pieces(text: &str, rtl_base: bool) -> Vec<Piece> {
+    use unicode_bidi::{BidiInfo, Level};
+    let text = strip_marks(text);
+    let base = if rtl_base { Level::rtl() } else { Level::ltr() };
+    let info = BidiInfo::new(&text, Some(base));
+    let mut out = Vec::new();
+    for para in &info.paragraphs {
+        let (levels, runs) = info.visual_runs(para, para.range.clone());
+        for run in runs {
+            let piece = text[run.clone()].trim_end_matches(['\n', '\r']);
+            if piece.is_empty() {
+                continue;
+            }
+            if !levels[run.start].is_rtl() {
+                out.push(Piece {
+                    text: piece.to_string(),
+                    arabic: false,
+                });
+                continue;
+            }
+            let mut atoms: Vec<Piece> = Vec::new();
+            for c in piece.chars() {
+                match atoms.last_mut() {
+                    Some(last) if last.arabic && (is_rtl_char(c) || c.is_whitespace()) => {
+                        last.text.push(c)
+                    }
+                    _ if is_rtl_char(c) => atoms.push(Piece {
+                        text: c.to_string(),
+                        arabic: true,
+                    }),
+                    _ => atoms.push(Piece {
+                        text: mirror(c).to_string(),
+                        arabic: false,
+                    }),
+                }
+            }
+            out.extend(atoms.into_iter().rev());
+        }
     }
+    out
+}
+
+/// Glyphe en miroir dans un passage de droite à gauche (parenthèses, guillemets…).
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '«' => '»',
+        '»' => '«',
+        '‹' => '›',
+        '›' => '‹',
+        _ => c,
+    }
+}
+
+/// Vrai si le texte commence (première lettre) par une écriture de droite à gauche.
+pub fn starts_rtl(text: &str) -> bool {
+    text.chars()
+        .find(|c| c.is_alphabetic())
+        .is_some_and(is_rtl_char)
+}
+
+/// Texte sans les marques de direction (U+200E, U+200F).
+pub fn strip_marks(text: &str) -> String {
+    text.chars().filter(|c| !matches!(*c, LRM | RLM)).collect()
 }
 
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).
@@ -351,35 +434,50 @@ mod tests {
                 continue;
             }
             let code = std::fs::read_to_string(&path).unwrap();
-            let pattern = "t!(\"";
-            let mut from = 0;
-            while let Some(pos) = code[from..].find(pattern) {
-                let start = from + pos;
-                from = start + pattern.len();
-                // `t!(` seul, pas la fin de `format!(`, `print!(`…
-                let prev = code[..start].chars().next_back();
-                if prev.is_some_and(|c| c.is_alphanumeric() || c == '_') {
-                    continue;
+            for pattern in ["t!(\"", "tp!(\""] {
+                let mut from = 0;
+                while let Some(pos) = code[from..].find(pattern) {
+                    let start = from + pos;
+                    from = start + pattern.len();
+                    // `t!(` seul, pas la fin de `format!(`, `print!(`…
+                    let prev = code[..start].chars().next_back();
+                    if prev.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue;
+                    }
+                    let key = code[from..].split('"').next().unwrap();
+                    assert!(
+                        en.contains_key(key),
+                        "{} : clé inconnue « {key} »",
+                        path.display()
+                    );
+                    used += 1;
                 }
-                let key = code[from..].split('"').next().unwrap();
-                assert!(
-                    en.contains_key(key),
-                    "{} : clé inconnue « {key} »",
-                    path.display()
-                );
-                used += 1;
             }
         }
         assert!(used > 50, "{used} clés utilisées");
     }
 
+    fn texts(pieces: &[Piece]) -> Vec<&str> {
+        pieces.iter().map(|p| p.text.as_str()).collect()
+    }
+
     #[test]
-    fn user_text_starting_in_arabic_is_shown_right_to_left() {
-        assert_eq!(display_dir("Order 12"), "Order 12");
-        assert_eq!(display_dir("12 — Order"), "12 — Order");
-        let ar = display_dir("رقم الطلب 12345 — Order ID");
-        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
-        assert_eq!(display_dir(""), "");
+    fn right_to_left_lines_are_cut_into_pieces_in_visual_order() {
+        // « أ B ج » (droite à gauche) : de gauche à droite, « ج », « B », « أ ».
+        let p = visual_pieces("أ B ج", true);
+        assert_eq!(texts(&p), vec!["ج", " ", "B", "أ "]);
+        assert!(p[0].arabic && !p[2].arabic && p[3].arabic);
+        // Ponctuation et symboles : isolés, à leur place, parenthèses retournées.
+        let p = visual_pieces("مسح الكل (⌘⇧Z).", true);
+        assert_eq!(texts(&p), vec![".", "(", "Z", "⇧", "⌘", ")", "مسح الكل "]);
+        // Les chiffres et le latin gardent leur ordre.
+        let p = visual_pieces("رقم 12345 — Order ID", true);
+        assert_eq!(texts(&p), vec!["Order ID", " ", "—", " ", "12345", "رقم "]);
+        // Texte sans arabe : un seul morceau.
+        assert_eq!(texts(&visual_pieces("CopyQ 2", false)), vec!["CopyQ 2"]);
+        assert!(visual_pieces("", true).is_empty());
+        assert!(has_rtl("abc ج") && !has_rtl("abc"));
+        assert!(starts_rtl("12 ج") && !starts_rtl("a ج"));
     }
 
     #[test]
@@ -410,10 +508,6 @@ mod tests {
             "コピーできませんでした:x"
         );
         assert_eq!(tr_in(Lang::De, "clé.inexistante"), "clé.inexistante");
-        // Arabe : textes encadrés de marques de droite à gauche, sauf les séparateurs.
-        let ar = tr_in(Lang::Ar, "limits.oldest_deleted");
-        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
         assert_eq!(tr_in(Lang::Ar, "num.decimal"), ".");
-        assert!(!tr_in(Lang::Fr, "limits.apply").contains(RLM));
     }
 }
