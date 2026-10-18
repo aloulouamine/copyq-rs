@@ -141,3 +141,57 @@ fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
 }
+
+#[cfg(test)]
+mod tests {
+    use eframe::egui;
+
+    /// Diagnostic : position horizontale de chaque caractère tel qu'egui le dessine.
+    fn glyph_xs(text: &str) -> Option<Vec<(char, f32)>> {
+        let bytes = [
+            "/System/Library/Fonts/SFArabic.ttf",
+            "/System/Library/Fonts/GeezaPro.ttc",
+        ]
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())?;
+        let ctx = egui::Context::default();
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "arabic".into(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "arabic".into());
+        ctx.set_fonts(fonts);
+        let _ = ctx.run_ui(Default::default(), |_| {});
+        let galley = ctx.fonts_mut(|f| {
+            f.layout_no_wrap(
+                text.to_owned(),
+                egui::FontId::proportional(14.0),
+                egui::Color32::WHITE,
+            )
+        });
+        Some(
+            galley
+                .rows
+                .iter()
+                .flat_map(|r| r.glyphs.iter().map(|g| (g.chr, g.pos.x)))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn diagnostic_bidi() {
+        for text in ["مسح الكل", "\u{200F}مسح الكل.\u{200F}", "abc def"] {
+            let Some(xs) = glyph_xs(text) else { return };
+            let first = xs
+                .iter()
+                .find(|(c, _)| *c == text.trim_start_matches('\u{200F}').chars().next().unwrap());
+            let last_word = xs.iter().find(|(c, _)| *c == 'ا' || *c == 'd');
+            panic!("{text:?} → {xs:?} ; premier={first:?} dernier mot={last_word:?}");
+        }
+    }
+}
