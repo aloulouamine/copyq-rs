@@ -118,10 +118,10 @@ pub(super) fn caption(ui: &mut Ui, text: &str, p: &Palette) {
 
 /// Texte sur plusieurs lignes au besoin.
 ///
-/// egui compose correctement une *ligne* d'arabe, mais coupe un paragraphe après
-/// l'avoir mis dans l'ordre visuel : les lignes sortent dans le désordre (la fin de la
-/// phrase en haut). Pour un texte de droite à gauche, on coupe donc nous-mêmes, dans
-/// l'ordre logique, et chaque ligne est affichée séparément.
+/// `text` est dans l'ordre logique (`tp!`, texte de l'utilisateur). Un texte de droite à
+/// gauche est coupé ici en lignes, dans l'ordre logique, puis chaque ligne est mise
+/// dans l'ordre visuel (`i18n::visual`) et affichée seule : egui, lui, couperait le
+/// paragraphe déjà retourné, et la fin de la phrase se retrouverait en haut.
 pub(super) fn paragraph(ui: &mut Ui, text: &str, size: f32, color: Color32) {
     if !crate::i18n::starts_rtl(text) {
         ui.add(egui::Label::new(RichText::new(text).size(size).color(color)).wrap());
@@ -132,18 +132,18 @@ pub(super) fn paragraph(ui: &mut Ui, text: &str, size: f32, color: Color32) {
     let ctx = ui.ctx().clone();
     let measure = |line: &str| {
         ctx.fonts_mut(|f| {
-            f.layout_no_wrap(crate::i18n::rtl_line(line), font.clone(), color)
+            f.layout_no_wrap(crate::i18n::visual(line), font.clone(), color)
                 .size()
                 .x
         })
     };
-    let lines = break_lines(&crate::i18n::strip_marks(text), width, measure);
+    let lines = break_lines(text, width, measure);
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         for line in lines {
             ui.add(
                 egui::Label::new(
-                    RichText::new(crate::i18n::rtl_line(&line))
+                    RichText::new(crate::i18n::visual(&line))
                         .size(size)
                         .color(color),
                 )
@@ -256,7 +256,7 @@ mod tests {
         let font = FontId::proportional(14.0);
         let measure = |s: &str| {
             ctx.fonts_mut(|f| {
-                f.layout_no_wrap(crate::i18n::rtl_line(s), font.clone(), Color32::WHITE)
+                f.layout_no_wrap(crate::i18n::visual(s), font.clone(), Color32::WHITE)
                     .size()
                     .x
             })
@@ -267,7 +267,7 @@ mod tests {
         let mut read = Vec::new();
         for line in &lines {
             let galley = ctx.fonts_mut(|f| {
-                f.layout_no_wrap(crate::i18n::rtl_line(line), font.clone(), Color32::WHITE)
+                f.layout_no_wrap(crate::i18n::visual(line), font.clone(), Color32::WHITE)
             });
             let mut glyphs: Vec<(char, f32)> = galley
                 .rows
@@ -323,7 +323,7 @@ mod tests {
         let font = FontId::proportional(12.0);
         let layout = |s: &str| {
             ctx.fonts_mut(|f| {
-                f.layout_no_wrap(crate::i18n::rtl_line(s), font.clone(), Color32::WHITE)
+                f.layout_no_wrap(crate::i18n::visual(s), font.clone(), Color32::WHITE)
             })
         };
         let letters = |s: &str| -> String {

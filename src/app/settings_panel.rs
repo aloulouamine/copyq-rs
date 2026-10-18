@@ -92,7 +92,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.items"),
-            t!("limits.oldest_deleted"),
+            tp!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_items)
@@ -104,7 +104,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.images"),
-            t!("limits.images_help"),
+            tp!("limits.images_help"),
             &mut |ui| {
                 ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
             },
@@ -112,7 +112,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.text_size"),
-            t!("limits.text_size_help"),
+            tp!("limits.text_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_text_kb)
@@ -125,7 +125,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.total_size"),
-            t!("limits.oldest_deleted"),
+            tp!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_total_mb)
@@ -138,7 +138,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.image_size"),
-            t!("limits.image_size_help"),
+            tp!("limits.image_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_image_mp)
@@ -150,7 +150,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.retention"),
-            t!("limits.retention_help"),
+            tp!("limits.retention_help"),
             &mut |ui| {
                 egui::ComboBox::from_id_salt("retention")
                     .selected_text(settings::retention_label(draft.retention_days))
@@ -230,7 +230,7 @@ impl CopyApp {
                 }
             }
         });
-        caption(ui, t!("general.auto_paste_help"), p);
+        caption(ui, tp!("general.auto_paste_help"), p);
         if self.settings.auto_paste && !paste::is_trusted() {
             hwrap(ui, |ui| {
                 ui.label(
@@ -254,7 +254,7 @@ impl CopyApp {
                 )
                 .changed();
             });
-            caption(ui, t!("general.hide_after_copy_help"), p);
+            caption(ui, tp!("general.hide_after_copy_help"), p);
             ui.add_space(8.0);
         }
 
@@ -273,7 +273,7 @@ impl CopyApp {
                     .store(self.settings.save_images, Ordering::Relaxed);
             }
         });
-        caption(ui, t!("general.save_images_help"), p);
+        caption(ui, tp!("general.save_images_help"), p);
         ui.add_space(8.0);
 
         let available = self.login_status != login_item::Status::Unavailable;
@@ -292,9 +292,9 @@ impl CopyApp {
         caption(
             ui,
             if available {
-                t!("general.open_at_login_help")
+                tp!("general.open_at_login_help")
             } else {
-                t!("general.open_at_login_unavailable")
+                tp!("general.open_at_login_unavailable")
             },
             p,
         );
@@ -319,7 +319,7 @@ impl CopyApp {
                 );
             }
         });
-        caption(ui, t!("general.save_passwords_help"), p);
+        caption(ui, tp!("general.save_passwords_help"), p);
         ui.add_space(8.0);
         hstack(ui, |ui| {
             if toggle(
@@ -340,14 +340,14 @@ impl CopyApp {
                 );
             }
         });
-        caption(ui, t!("general.detect_passwords_help"), p);
+        caption(ui, tp!("general.detect_passwords_help"), p);
         if changed && self.settings.detect_passwords {
             self.reclassify();
         }
         if let Some(err) = storage::encryption_error() {
             paragraph(
                 ui,
-                &t!("general.keychain_error", error = err),
+                &tp!("general.keychain_error", error = err),
                 11.5,
                 p.danger,
             );

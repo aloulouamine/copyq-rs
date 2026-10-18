@@ -191,19 +191,40 @@ fn preferred_languages() -> Vec<String> {
 
 type Table = HashMap<&'static str, &'static str>;
 
+/// Textes tels qu'écrits (ordre logique).
 fn tables() -> &'static [Table] {
     static TABLES: OnceLock<Vec<Table>> = OnceLock::new();
     TABLES.get_or_init(|| ALL.iter().map(|l| parse(*l)).collect())
 }
 
-/// Marque de droite à gauche (U+200F, invisible).
+/// Textes prêts à afficher sur une ligne : pour une langue de droite à gauche, mis dans
+/// l'ordre visuel (voir `visual`) une fois pour toutes.
+fn display_tables() -> &'static [Table] {
+    static TABLES: OnceLock<Vec<Table>> = OnceLock::new();
+    TABLES.get_or_init(|| {
+        ALL.iter()
+            .zip(tables())
+            .map(|(lang, table)| {
+                if !lang.is_rtl() {
+                    return table.clone();
+                }
+                table
+                    .iter()
+                    .map(|(k, v)| {
+                        let shown: &'static str = Box::leak(visual(v).into_boxed_str());
+                        (*k, shown)
+                    })
+                    .collect()
+            })
+            .collect()
+    })
+}
+
+/// Marques de direction (invisibles) : droite à gauche, gauche à droite.
 const RLM: char = '\u{200F}';
+const LRM: char = '\u{200E}';
 
 /// Lit un fichier de langue ; les textes vivent jusqu'à la fin du programme.
-///
-/// Écriture de droite à gauche : chaque texte est encadré de marques RLM. egui met en
-/// forme l'arabe mais compose la ligne de gauche à droite ; sans ces marques, la
-/// ponctuation de début ou de fin (« . », « ⚠ », « (⌘⇧Z) ») se retrouve du mauvais côté.
 fn parse(lang: Lang) -> Table {
     let map: HashMap<String, String> = serde_json::from_str(lang.source()).unwrap_or_else(|e| {
         log::error!("fichier de langue invalide : {e}");
@@ -211,11 +232,6 @@ fn parse(lang: Lang) -> Table {
     });
     map.into_iter()
         .map(|(k, v)| {
-            let v = if lang.is_rtl() && !k.starts_with("num.") {
-                format!("{RLM}{v}{RLM}")
-            } else {
-                v
-            };
             let k: &'static str = Box::leak(k.into_boxed_str());
             let v: &'static str = Box::leak(v.into_boxed_str());
             (k, v)
@@ -223,18 +239,27 @@ fn parse(lang: Lang) -> Table {
         .collect()
 }
 
-/// Texte d'une clé dans une langue donnée (secours : anglais, puis la clé elle-même).
-pub fn tr_in(lang: Lang, key: &'static str) -> &'static str {
-    let t = tables();
-    t[lang.index()]
+fn lookup(tables: &'static [Table], lang: Lang, key: &'static str) -> &'static str {
+    tables[lang.index()]
         .get(key)
-        .or_else(|| t[Lang::En.index()].get(key))
+        .or_else(|| tables[Lang::En.index()].get(key))
         .copied()
         .unwrap_or(key)
 }
 
+/// Texte d'une clé, prêt à afficher sur une ligne (secours : anglais, puis la clé).
+pub fn tr_in(lang: Lang, key: &'static str) -> &'static str {
+    lookup(display_tables(), lang, key)
+}
+
 pub fn tr(key: &'static str) -> &'static str {
     tr_in(current(), key)
+}
+
+/// Texte d'une clé tel qu'écrit (ordre logique) : pour `paragraph`, qui le coupe en
+/// lignes avant de mettre chaque ligne dans l'ordre visuel.
+pub fn tr_logical(key: &'static str) -> &'static str {
+    lookup(tables(), current(), key)
 }
 
 /// Remplace les `{nom}` du texte par les valeurs données.
@@ -246,16 +271,55 @@ pub fn fill(template: &str, args: &[(&str, &dyn Display)]) -> String {
     out
 }
 
+/// Texte avec valeurs, prêt à afficher sur une ligne.
 pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
-    fill(tr(key), args)
+    let text = fill(tr_logical(key), args);
+    if current().is_rtl() {
+        visual(&text)
+    } else {
+        text
+    }
 }
 
-/// Texte de l'utilisateur prêt à afficher : s'il commence par de l'arabe (ou de
-/// l'hébreu…), il est encadré de marques RLM pour que egui le compose de droite à
-/// gauche, ponctuation et chiffres compris. Sinon, inchangé.
+/// Texte avec valeurs, dans l'ordre logique (pour `paragraph`).
+pub fn trf_logical(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
+    fill(tr_logical(key), args)
+}
+
+/// Une ligne de droite à gauche, dans l'ordre où egui doit la recevoir.
+///
+/// egui met en forme l'arabe et retourne bien chaque passage de droite à gauche, mais
+/// il range les passages (arabe, latin, chiffres, ponctuation) de gauche à droite.
+/// On applique donc l'algorithme bidirectionnel d'Unicode (paragraphe de droite à
+/// gauche) et on lui donne les passages déjà dans l'ordre visuel, chacun encadré de
+/// marques (RLM pour l'arabe, LRM pour le reste) pour qu'il les compose sans les
+/// déplacer.
+pub fn visual(text: &str) -> String {
+    use unicode_bidi::{BidiInfo, Level};
+    let text = strip_marks(text);
+    let info = BidiInfo::new(&text, Some(Level::rtl()));
+    let mut out = String::with_capacity(text.len() + 16);
+    for para in &info.paragraphs {
+        let (levels, runs) = info.visual_runs(para, para.range.clone());
+        for run in runs {
+            let piece = text[run.clone()].trim_end_matches(['\n', '\r']);
+            if piece.is_empty() {
+                continue;
+            }
+            let mark = if levels[run.start].is_rtl() { RLM } else { LRM };
+            out.push(mark);
+            out.push_str(piece);
+            out.push(mark);
+        }
+    }
+    out
+}
+
+/// Texte de l'utilisateur prêt à afficher sur une ligne : s'il commence par de l'arabe
+/// (ou de l'hébreu…), il est mis dans l'ordre visuel de droite à gauche. Sinon, inchangé.
 pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
     if starts_rtl(text) {
-        format!("{RLM}{text}{RLM}").into()
+        visual(text).into()
     } else {
         text.into()
     }
@@ -270,19 +334,12 @@ pub fn starts_rtl(text: &str) -> bool {
 
 /// Texte sans les marques de direction (U+200E, U+200F).
 pub fn strip_marks(text: &str) -> String {
-    text.chars()
-        .filter(|c| !matches!(c, '\u{200E}' | '\u{200F}'))
-        .collect()
-}
-
-/// Une ligne à composer de droite à gauche (encadrée de marques RLM).
-pub fn rtl_line(line: &str) -> String {
-    format!("{RLM}{line}{RLM}")
+    text.chars().filter(|c| !matches!(c, LRM | RLM)).collect()
 }
 
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).
 pub fn decimal(x: f64) -> String {
-    format!("{x:.1}").replace('.', tr("num.decimal"))
+    format!("{x:.1}").replace('.', tr_logical("num.decimal"))
 }
 
 /// `t!("clé")` → `&'static str` ; `t!("clé", n = 3, error = e)` → `String`.
@@ -293,6 +350,20 @@ macro_rules! t {
     };
     ($key:literal, $($name:ident = $value:expr),+ $(,)?) => {
         $crate::i18n::trf(
+            $key,
+            &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
+        )
+    };
+}
+
+/// `tp!("clé")` : texte dans l'ordre logique, pour un paragraphe (`widgets::paragraph`).
+#[macro_export]
+macro_rules! tp {
+    ($key:literal) => {
+        $crate::i18n::tr_logical($key)
+    };
+    ($key:literal, $($name:ident = $value:expr),+ $(,)?) => {
+        $crate::i18n::trf_logical(
             $key,
             &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
         )
@@ -367,23 +438,24 @@ mod tests {
                 continue;
             }
             let code = std::fs::read_to_string(&path).unwrap();
-            let pattern = "t!(\"";
-            let mut from = 0;
-            while let Some(pos) = code[from..].find(pattern) {
-                let start = from + pos;
-                from = start + pattern.len();
-                // `t!(` seul, pas la fin de `format!(`, `print!(`…
-                let prev = code[..start].chars().next_back();
-                if prev.is_some_and(|c| c.is_alphanumeric() || c == '_') {
-                    continue;
+            for pattern in ["t!(\"", "tp!(\""] {
+                let mut from = 0;
+                while let Some(pos) = code[from..].find(pattern) {
+                    let start = from + pos;
+                    from = start + pattern.len();
+                    // `t!(` seul, pas la fin de `format!(`, `print!(`…
+                    let prev = code[..start].chars().next_back();
+                    if prev.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue;
+                    }
+                    let key = code[from..].split('"').next().unwrap();
+                    assert!(
+                        en.contains_key(key),
+                        "{} : clé inconnue « {key} »",
+                        path.display()
+                    );
+                    used += 1;
                 }
-                let key = code[from..].split('"').next().unwrap();
-                assert!(
-                    en.contains_key(key),
-                    "{} : clé inconnue « {key} »",
-                    path.display()
-                );
-                used += 1;
             }
         }
         assert!(used > 50, "{used} clés utilisées");
@@ -394,8 +466,22 @@ mod tests {
         assert_eq!(display_dir("Order 12"), "Order 12");
         assert_eq!(display_dir("12 — Order"), "12 — Order");
         let ar = display_dir("رقم الطلب 12345 — Order ID");
-        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
+        assert_eq!(
+            strip_marks(&ar).chars().count(),
+            "رقم الطلب 12345 — Order ID".chars().count()
+        );
         assert_eq!(display_dir(""), "");
+    }
+
+    #[test]
+    fn right_to_left_lines_are_given_to_egui_in_visual_order() {
+        // Paragraphe de droite à gauche : « أ B ج » s'affiche « ج B أ » de gauche à droite.
+        let v = visual("أ B ج");
+        assert_eq!(strip_marks(&v), " جBأ ");
+        assert!(v.starts_with(RLM));
+        // Les chiffres gardent leur ordre.
+        assert!(strip_marks(&visual("من 8 إلى 128")).contains("128"));
+        assert_eq!(visual(""), "");
     }
 
     #[test]
@@ -426,10 +512,11 @@ mod tests {
             "コピーできませんでした:x"
         );
         assert_eq!(tr_in(Lang::De, "clé.inexistante"), "clé.inexistante");
-        // Arabe : textes encadrés de marques de droite à gauche, sauf les séparateurs.
+        // Arabe : textes affichés mis dans l'ordre visuel (avec marques) ; texte
+        // logique inchangé.
         let ar = tr_in(Lang::Ar, "limits.oldest_deleted");
         assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
-        assert_eq!(tr_in(Lang::Ar, "num.decimal"), ".");
         assert!(!tr_in(Lang::Fr, "limits.apply").contains(RLM));
+        assert_eq!(lookup(tables(), Lang::Ar, "num.decimal"), ".");
     }
 }
