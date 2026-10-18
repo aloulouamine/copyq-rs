@@ -189,6 +189,20 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
         }
         None => {}
     }
+    // Famille « rtl » (textes arabes, voir `app::widgets::bidi_job`) : la police arabe
+    // d'abord, pour qu'un mot arabe, ses espaces et sa ponctuation forment un seul bloc.
+    let mut rtl = fonts
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(pos) = rtl.iter().position(|f| f == "arabic") {
+        let arabic = rtl.remove(pos);
+        rtl.insert(0, arabic);
+    }
+    fonts
+        .families
+        .insert(FontFamily::Name(crate::app::RTL_FAMILY.into()), rtl);
     ctx.set_fonts(fonts);
 }
 

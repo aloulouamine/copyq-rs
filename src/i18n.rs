@@ -197,29 +197,6 @@ fn tables() -> &'static [Table] {
     TABLES.get_or_init(|| ALL.iter().map(|l| parse(*l)).collect())
 }
 
-/// Textes prêts à afficher sur une ligne : pour une langue de droite à gauche, mis dans
-/// l'ordre visuel (voir `visual`) une fois pour toutes.
-fn display_tables() -> &'static [Table] {
-    static TABLES: OnceLock<Vec<Table>> = OnceLock::new();
-    TABLES.get_or_init(|| {
-        ALL.iter()
-            .zip(tables())
-            .map(|(lang, table)| {
-                if !lang.is_rtl() {
-                    return table.clone();
-                }
-                table
-                    .iter()
-                    .map(|(k, v)| {
-                        let shown: &'static str = Box::leak(visual(v).into_boxed_str());
-                        (*k, shown)
-                    })
-                    .collect()
-            })
-            .collect()
-    })
-}
-
 /// Marques de direction (invisibles) : droite à gauche, gauche à droite.
 const RLM: char = '\u{200F}';
 const LRM: char = '\u{200E}';
@@ -247,19 +224,13 @@ fn lookup(tables: &'static [Table], lang: Lang, key: &'static str) -> &'static s
         .unwrap_or(key)
 }
 
-/// Texte d'une clé, prêt à afficher sur une ligne (secours : anglais, puis la clé).
+/// Texte d'une clé (secours : anglais, puis la clé elle-même).
 pub fn tr_in(lang: Lang, key: &'static str) -> &'static str {
-    lookup(display_tables(), lang, key)
+    lookup(tables(), lang, key)
 }
 
 pub fn tr(key: &'static str) -> &'static str {
     tr_in(current(), key)
-}
-
-/// Texte d'une clé tel qu'écrit (ordre logique) : pour `paragraph`, qui le coupe en
-/// lignes avant de mettre chaque ligne dans l'ordre visuel.
-pub fn tr_logical(key: &'static str) -> &'static str {
-    lookup(tables(), current(), key)
 }
 
 /// Remplace les `{nom}` du texte par les valeurs données.
@@ -271,34 +242,44 @@ pub fn fill(template: &str, args: &[(&str, &dyn Display)]) -> String {
     out
 }
 
-/// Texte avec valeurs, prêt à afficher sur une ligne.
 pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
-    let text = fill(tr_logical(key), args);
-    if current().is_rtl() {
-        visual(&text)
-    } else {
-        text
-    }
+    fill(tr(key), args)
 }
 
-/// Texte avec valeurs, dans l'ordre logique (pour `paragraph`).
-pub fn trf_logical(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
-    fill(tr_logical(key), args)
+/// Morceau de texte à dessiner : les morceaux sont dans l'ordre visuel, de gauche à
+/// droite. `arabic` : écriture de droite à gauche, que egui met en forme et retourne
+/// lui-même (à composer avec une police arabe en tête, pour qu'il reste d'un seul tenant).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Piece {
+    pub text: String,
+    pub arabic: bool,
 }
 
-/// Une ligne de droite à gauche, dans l'ordre où egui doit la recevoir.
+/// Lettres et signes des écritures de droite à gauche (arabe, hébreu…).
+pub fn is_rtl_char(c: char) -> bool {
+    matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
+}
+
+pub fn has_rtl(text: &str) -> bool {
+    text.chars().any(is_rtl_char)
+}
+
+/// Découpe une ligne en morceaux dans l'ordre visuel (algorithme bidirectionnel
+/// d'Unicode).
 ///
-/// egui met en forme l'arabe et retourne bien chaque passage de droite à gauche, mais
-/// il range les passages (arabe, latin, chiffres, ponctuation) de gauche à droite.
-/// On applique donc l'algorithme bidirectionnel d'Unicode (paragraphe de droite à
-/// gauche) et on lui donne les passages déjà dans l'ordre visuel, chacun encadré de
-/// marques (RLM pour l'arabe, LRM pour le reste) pour qu'il les compose sans les
-/// déplacer.
-pub fn visual(text: &str) -> String {
+/// egui ne connaît pas le sens d'écriture : il coupe le texte par police, met en forme
+/// chaque morceau (harfrust retourne alors un morceau arabe) et pose les morceaux de
+/// gauche à droite dans l'ordre reçu. Une phrase arabe dont les espaces ou la
+/// ponctuation viennent d'une autre police sortirait donc mot par mot dans le désordre.
+/// On lui donne ici les morceaux déjà rangés : les passages de droite à gauche sont
+/// découpés en mots arabes (espaces compris) et en signes isolés, dont on inverse
+/// l'ordre et dont on retourne les parenthèses et guillemets.
+pub fn visual_pieces(text: &str, rtl_base: bool) -> Vec<Piece> {
     use unicode_bidi::{BidiInfo, Level};
     let text = strip_marks(text);
-    let info = BidiInfo::new(&text, Some(Level::rtl()));
-    let mut out = String::with_capacity(text.len() + 16);
+    let base = if rtl_base { Level::rtl() } else { Level::ltr() };
+    let info = BidiInfo::new(&text, Some(base));
+    let mut out = Vec::new();
     for para in &info.paragraphs {
         let (levels, runs) = info.visual_runs(para, para.range.clone());
         for run in runs {
@@ -306,22 +287,51 @@ pub fn visual(text: &str) -> String {
             if piece.is_empty() {
                 continue;
             }
-            let mark = if levels[run.start].is_rtl() { RLM } else { LRM };
-            out.push(mark);
-            out.push_str(piece);
-            out.push(mark);
+            if !levels[run.start].is_rtl() {
+                out.push(Piece {
+                    text: piece.to_string(),
+                    arabic: false,
+                });
+                continue;
+            }
+            let mut atoms: Vec<Piece> = Vec::new();
+            for c in piece.chars() {
+                match atoms.last_mut() {
+                    Some(last) if last.arabic && (is_rtl_char(c) || c.is_whitespace()) => {
+                        last.text.push(c)
+                    }
+                    _ if is_rtl_char(c) => atoms.push(Piece {
+                        text: c.to_string(),
+                        arabic: true,
+                    }),
+                    _ => atoms.push(Piece {
+                        text: mirror(c).to_string(),
+                        arabic: false,
+                    }),
+                }
+            }
+            out.extend(atoms.into_iter().rev());
         }
     }
     out
 }
 
-/// Texte de l'utilisateur prêt à afficher sur une ligne : s'il commence par de l'arabe
-/// (ou de l'hébreu…), il est mis dans l'ordre visuel de droite à gauche. Sinon, inchangé.
-pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
-    if starts_rtl(text) {
-        visual(text).into()
-    } else {
-        text.into()
+/// Glyphe en miroir dans un passage de droite à gauche (parenthèses, guillemets…).
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '«' => '»',
+        '»' => '«',
+        '‹' => '›',
+        '›' => '‹',
+        _ => c,
     }
 }
 
@@ -329,7 +339,7 @@ pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
 pub fn starts_rtl(text: &str) -> bool {
     text.chars()
         .find(|c| c.is_alphabetic())
-        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF))
+        .is_some_and(is_rtl_char)
 }
 
 /// Texte sans les marques de direction (U+200E, U+200F).
@@ -339,7 +349,7 @@ pub fn strip_marks(text: &str) -> String {
 
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).
 pub fn decimal(x: f64) -> String {
-    format!("{x:.1}").replace('.', tr_logical("num.decimal"))
+    format!("{x:.1}").replace('.', tr("num.decimal"))
 }
 
 /// `t!("clé")` → `&'static str` ; `t!("clé", n = 3, error = e)` → `String`.
@@ -350,20 +360,6 @@ macro_rules! t {
     };
     ($key:literal, $($name:ident = $value:expr),+ $(,)?) => {
         $crate::i18n::trf(
-            $key,
-            &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
-        )
-    };
-}
-
-/// `tp!("clé")` : texte dans l'ordre logique, pour un paragraphe (`widgets::paragraph`).
-#[macro_export]
-macro_rules! tp {
-    ($key:literal) => {
-        $crate::i18n::tr_logical($key)
-    };
-    ($key:literal, $($name:ident = $value:expr),+ $(,)?) => {
-        $crate::i18n::trf_logical(
             $key,
             &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
         )
@@ -461,27 +457,27 @@ mod tests {
         assert!(used > 50, "{used} clés utilisées");
     }
 
-    #[test]
-    fn user_text_starting_in_arabic_is_shown_right_to_left() {
-        assert_eq!(display_dir("Order 12"), "Order 12");
-        assert_eq!(display_dir("12 — Order"), "12 — Order");
-        let ar = display_dir("رقم الطلب 12345 — Order ID");
-        assert_eq!(
-            strip_marks(&ar).chars().count(),
-            "رقم الطلب 12345 — Order ID".chars().count()
-        );
-        assert_eq!(display_dir(""), "");
+    fn texts(pieces: &[Piece]) -> Vec<&str> {
+        pieces.iter().map(|p| p.text.as_str()).collect()
     }
 
     #[test]
-    fn right_to_left_lines_are_given_to_egui_in_visual_order() {
-        // Paragraphe de droite à gauche : « أ B ج » s'affiche « ج B أ » de gauche à droite.
-        let v = visual("أ B ج");
-        assert_eq!(strip_marks(&v), " جBأ ");
-        assert!(v.starts_with(RLM));
-        // Les chiffres gardent leur ordre.
-        assert!(strip_marks(&visual("من 8 إلى 128")).contains("128"));
-        assert_eq!(visual(""), "");
+    fn right_to_left_lines_are_cut_into_pieces_in_visual_order() {
+        // « أ B ج » (droite à gauche) : de gauche à droite, « ج », « B », « أ ».
+        let p = visual_pieces("أ B ج", true);
+        assert_eq!(texts(&p), vec![" ج", "B", "أ "]);
+        assert!(p[0].arabic && !p[1].arabic && p[2].arabic);
+        // Ponctuation et symboles : isolés, à leur place, parenthèses retournées.
+        let p = visual_pieces("مسح الكل (⌘⇧Z).", true);
+        assert_eq!(texts(&p), vec![".", "(", "Z", "⇧", "⌘", ")", "مسح الكل "]);
+        // Les chiffres et le latin gardent leur ordre.
+        let p = visual_pieces("رقم 12345 — Order ID", true);
+        assert_eq!(texts(&p), vec!["Order ID", " ", "—", " ", "12345", "رقم "]);
+        // Texte sans arabe : un seul morceau.
+        assert_eq!(texts(&visual_pieces("CopyQ 2", false)), vec!["CopyQ 2"]);
+        assert!(visual_pieces("", true).is_empty());
+        assert!(has_rtl("abc ج") && !has_rtl("abc"));
+        assert!(starts_rtl("12 ج") && !starts_rtl("a ج"));
     }
 
     #[test]
@@ -512,11 +508,6 @@ mod tests {
             "コピーできませんでした:x"
         );
         assert_eq!(tr_in(Lang::De, "clé.inexistante"), "clé.inexistante");
-        // Arabe : textes affichés mis dans l'ordre visuel (avec marques) ; texte
-        // logique inchangé.
-        let ar = tr_in(Lang::Ar, "limits.oldest_deleted");
-        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
-        assert!(!tr_in(Lang::Fr, "limits.apply").contains(RLM));
-        assert_eq!(lookup(tables(), Lang::Ar, "num.decimal"), ".");
+        assert_eq!(tr_in(Lang::Ar, "num.decimal"), ".");
     }
 }

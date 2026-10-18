@@ -1,6 +1,8 @@
 //! Panneau « Réglages » : onglets Général et Limites.
 
-use super::widgets::{caption, column, ghost_button, hstack, hwrap, paragraph, toggle, trailing};
+use super::widgets::{
+    caption, column, ghost_button, hstack, hwrap, paragraph, toggle, trailing, wt,
+};
 use super::{CopyApp, SettingsTab};
 use crate::history;
 use crate::logging::LockExt;
@@ -20,23 +22,14 @@ impl CopyApp {
     fn settings_body(&mut self, ui: &mut Ui, p: &Palette) {
         ui.spacing_mut().item_spacing.y = 4.0;
         hstack(ui, |ui| {
-            ui.label(
-                RichText::new(t!("settings.title"))
-                    .size(13.5)
-                    .color(p.text)
-                    .strong(),
-            );
+            ui.label(wt(t!("settings.title"), 13.5, p.text));
             ui.with_layout(trailing(), |ui| {
                 for (tab, label) in [
                     (SettingsTab::Limits, t!("settings.tab_limits")),
                     (SettingsTab::General, t!("settings.tab_general")),
                 ] {
                     let active = self.settings_tab == tab;
-                    let text = RichText::new(label).size(12.5).color(if active {
-                        p.accent
-                    } else {
-                        p.text_muted
-                    });
+                    let text = wt(label, 12.5, if active { p.accent } else { p.text_muted });
                     let button = egui::Button::new(text)
                         .fill(if active {
                             p.accent_soft
@@ -69,7 +62,7 @@ impl CopyApp {
             .unwrap_or_else(|| self.settings.clone());
         let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
             hstack(ui, |ui| {
-                ui.label(RichText::new(label).size(12.5).color(p.text));
+                ui.label(wt(label, 12.5, p.text));
                 ui.with_layout(trailing(), |ui| {
                     // Champs bien visibles : cadre, largeur minimale.
                     let v = ui.visuals_mut();
@@ -92,7 +85,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.items"),
-            tp!("limits.oldest_deleted"),
+            t!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_items)
@@ -104,7 +97,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.images"),
-            tp!("limits.images_help"),
+            t!("limits.images_help"),
             &mut |ui| {
                 ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
             },
@@ -112,7 +105,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.text_size"),
-            tp!("limits.text_size_help"),
+            t!("limits.text_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_text_kb)
@@ -125,7 +118,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.total_size"),
-            tp!("limits.oldest_deleted"),
+            t!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_total_mb)
@@ -138,7 +131,7 @@ impl CopyApp {
         row(
             ui,
             t!("limits.image_size"),
-            tp!("limits.image_size_help"),
+            t!("limits.image_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_image_mp)
@@ -150,13 +143,17 @@ impl CopyApp {
         row(
             ui,
             t!("limits.retention"),
-            tp!("limits.retention_help"),
+            t!("limits.retention_help"),
             &mut |ui| {
                 egui::ComboBox::from_id_salt("retention")
-                    .selected_text(settings::retention_label(draft.retention_days))
+                    .selected_text(wt(
+                        &settings::retention_label(draft.retention_days),
+                        13.0,
+                        p.text,
+                    ))
                     .show_ui(ui, |ui| {
                         for days in settings::RETENTION_CHOICES {
-                            let label = settings::retention_label(days);
+                            let label = wt(&settings::retention_label(days), 13.0, p.text);
                             ui.selectable_value(&mut draft.retention_days, days, label);
                         }
                     });
@@ -174,10 +171,9 @@ impl CopyApp {
             }
             ui.with_layout(trailing(), |ui| {
                 if pending {
-                    let apply =
-                        egui::Button::new(RichText::new(t!("limits.apply")).color(Color32::WHITE))
-                            .fill(p.accent)
-                            .corner_radius(7.0);
+                    let apply = egui::Button::new(wt(t!("limits.apply"), 13.0, Color32::WHITE))
+                        .fill(p.accent)
+                        .corner_radius(7.0);
                     if ui.add(apply).clicked() {
                         self.settings = draft.clone();
                         let removed = self.apply_limits();
@@ -200,11 +196,7 @@ impl CopyApp {
                 .lock_safe()
                 .would_remove(draft.limits(), history::now_secs());
             if n > 0 {
-                ui.label(
-                    RichText::new(t!("limits.will_remove", n = n))
-                        .size(11.5)
-                        .color(p.danger),
-                );
+                ui.label(wt(&t!("limits.will_remove", n = n), 11.5, p.danger));
             }
         }
         self.limits_draft = Some(draft);
@@ -230,14 +222,10 @@ impl CopyApp {
                 }
             }
         });
-        caption(ui, tp!("general.auto_paste_help"), p);
+        caption(ui, t!("general.auto_paste_help"), p);
         if self.settings.auto_paste && !paste::is_trusted() {
             hwrap(ui, |ui| {
-                ui.label(
-                    RichText::new(t!("general.accessibility_needed"))
-                        .size(11.5)
-                        .color(p.danger),
-                );
+                ui.label(wt(t!("general.accessibility_needed"), 11.5, p.danger));
                 if ghost_button(ui, t!("general.open_settings"), p.accent, p).clicked() {
                     paste::open_accessibility_settings();
                 }
@@ -254,7 +242,7 @@ impl CopyApp {
                 )
                 .changed();
             });
-            caption(ui, tp!("general.hide_after_copy_help"), p);
+            caption(ui, t!("general.hide_after_copy_help"), p);
             ui.add_space(8.0);
         }
 
@@ -273,7 +261,7 @@ impl CopyApp {
                     .store(self.settings.save_images, Ordering::Relaxed);
             }
         });
-        caption(ui, tp!("general.save_images_help"), p);
+        caption(ui, t!("general.save_images_help"), p);
         ui.add_space(8.0);
 
         let available = self.login_status != login_item::Status::Unavailable;
@@ -292,9 +280,9 @@ impl CopyApp {
         caption(
             ui,
             if available {
-                tp!("general.open_at_login_help")
+                t!("general.open_at_login_help")
             } else {
-                tp!("general.open_at_login_unavailable")
+                t!("general.open_at_login_unavailable")
             },
             p,
         );
@@ -319,7 +307,7 @@ impl CopyApp {
                 );
             }
         });
-        caption(ui, tp!("general.save_passwords_help"), p);
+        caption(ui, t!("general.save_passwords_help"), p);
         ui.add_space(8.0);
         hstack(ui, |ui| {
             if toggle(
@@ -340,14 +328,14 @@ impl CopyApp {
                 );
             }
         });
-        caption(ui, tp!("general.detect_passwords_help"), p);
+        caption(ui, t!("general.detect_passwords_help"), p);
         if changed && self.settings.detect_passwords {
             self.reclassify();
         }
         if let Some(err) = storage::encryption_error() {
             paragraph(
                 ui,
-                &tp!("general.keychain_error", error = err),
+                &t!("general.keychain_error", error = err),
                 11.5,
                 p.danger,
             );
@@ -378,25 +366,21 @@ impl CopyApp {
         };
         let before = self.settings.language.clone();
         hstack(ui, |ui| {
-            ui.label(
-                RichText::new(t!("settings.language"))
-                    .size(12.5)
-                    .color(p.text_muted),
-            );
+            ui.label(wt(t!("settings.language"), 12.5, p.text_muted));
             ui.with_layout(trailing(), |ui| {
                 egui::ComboBox::from_id_salt("language")
-                    .selected_text(label(&self.settings.language))
+                    .selected_text(wt(&label(&self.settings.language), 13.0, p.text))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.settings.language,
                             settings::AUTO_LANGUAGE.to_string(),
-                            label(settings::AUTO_LANGUAGE),
+                            wt(&label(settings::AUTO_LANGUAGE), 13.0, p.text),
                         );
                         for lang in i18n::ALL {
                             ui.selectable_value(
                                 &mut self.settings.language,
                                 lang.code().to_string(),
-                                lang.native_name(),
+                                wt(lang.native_name(), 13.0, p.text),
                             );
                         }
                     });
