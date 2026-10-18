@@ -42,10 +42,16 @@ jobs:
         if: steps.clippy.outcome == 'success'
         continue-on-error: true
         run: cargo test 2>&1 | tail -40 > tests.log
+      - name: ESSAI source epaint
+        if: always()
+        run: |
+          E=$(find ~/.cargo/registry/src -maxdepth 2 -type d -name "epaint-0.37*" | head -1)
+          mkdir -p epaint-src && cp -r "$E/src/text" epaint-src/ || true
+          ls /System/Library/Fonts/ > fonts-list.txt; ls /System/Library/Fonts/Supplemental/ >> fonts-list.txt || true
       - name: Publier (branche ci-check)
         if: always()
         run: |
-          mkdir -p /tmp/out && cp check.log tests.log Cargo.lock /tmp/out/ 2>/dev/null || true
+          mkdir -p /tmp/out && cp -r check.log tests.log Cargo.lock epaint-src fonts-list.txt /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           echo "${GITHUB_SHA} clippy=${{ steps.clippy.outcome }} tests=${{ steps.tests.outcome }}" > commit.txt
           git init -q -b ci-check
