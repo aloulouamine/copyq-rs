@@ -17,10 +17,10 @@ log = "0.4"
 # la dépendance `lru` signalée par cargo audit (RUSTSEC-2026-0253).
 turso = { version = "0.8", default-features = false, features = ["mimalloc"] }
 tokio = { version = "1", features = ["rt"] }
-aes-gcm = "0.10"
-hmac = "0.12"
-sha2 = "0.10"
-base64 = "0.22"
+aes-gcm = { version = "0.11", features = ["getrandom"] }
+hmac = "0.13"
+sha2 = "0.11"
+base64 = "0.23"
 image = { version = "0.25", default-features = false, features = ["png"] }
 unicode-normalization = "0.1"
 
