@@ -34,7 +34,7 @@
   "row.delete": "Eliminar",
   "row.unmark_password": "No es una contraseña: mostrar sin ocultar (⌘L)",
   "row.mark_password": "Es una contraseña: cifrar y ocultar (⌘L)",
-  "row.hidden_password_tip": "Contraseña oculta: haz clic o pulsa ↵ para copiarla",
+  "row.hidden_password_tip": "Contraseña oculta: haz clic o pulsa Intro para copiarla",
   "row.image": "Imagen",
   "row.file": "Archivo",
   "row.files_more": "{name} y {n} más",

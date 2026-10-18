@@ -34,7 +34,7 @@
   "row.delete": "Delete",
   "row.unmark_password": "Not a password: show in plain text (⌘L)",
   "row.mark_password": "This is a password: encrypt and hide (⌘L)",
-  "row.hidden_password_tip": "Hidden password — click or ↵ to copy it",
+  "row.hidden_password_tip": "Hidden password — click or press Return to copy it",
   "row.image": "Image",
   "row.file": "File",
   "row.files_more": "{name} + {n} more",

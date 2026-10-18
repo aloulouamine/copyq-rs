@@ -34,7 +34,7 @@
   "row.delete": "Löschen",
   "row.unmark_password": "Kein Passwort: im Klartext anzeigen (⌘L)",
   "row.mark_password": "Das ist ein Passwort: verschlüsseln und verbergen (⌘L)",
-  "row.hidden_password_tip": "Verborgenes Passwort – zum Kopieren klicken oder ↵",
+  "row.hidden_password_tip": "Verborgenes Passwort – zum Kopieren klicken oder Eingabetaste drücken",
   "row.image": "Bild",
   "row.file": "Datei",
   "row.files_more": "{name} + {n} weitere",

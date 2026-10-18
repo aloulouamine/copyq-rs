@@ -142,11 +142,13 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
 pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
     let mut fonts = egui::FontDefinitions::default();
     let mut first = 0;
-    let mut add = |fonts: &mut egui::FontDefinitions, name: &str, bytes: Vec<u8>| {
-        fonts.font_data.insert(
-            name.to_owned(),
-            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
-        );
+    let mut add = |fonts: &mut egui::FontDefinitions, name: &str, bytes: Vec<u8>, index: u32| {
+        let mut data = egui::FontData::from_owned(bytes);
+        // Fichier .ttc : plusieurs polices, on choisit la bonne (ex. PingFang SC/TC/HK).
+        data.index = index;
+        fonts
+            .font_data
+            .insert(name.to_owned(), std::sync::Arc::new(data));
         if let Some(family) = fonts.families.get_mut(&FontFamily::Proportional) {
             family.insert(first, name.to_owned());
             first += 1;
@@ -158,7 +160,7 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
         "/Library/Fonts/SF-Pro-Text-Regular.otf",
     ];
     if let Some(bytes) = system.iter().find_map(|p| std::fs::read(p).ok()) {
-        add(&mut fonts, "system", bytes);
+        add(&mut fonts, "system", bytes, 0);
     }
     // Arabe : police système en secours pour tout le monde (sans elle, un texte
     // arabe copié s'affiche en carrés vides), et pour l'interface en arabe.
@@ -168,18 +170,18 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
         "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
     ];
     if let Some(bytes) = arabic.iter().find_map(|p| std::fs::read(p).ok()) {
-        add(&mut fonts, "arabic", bytes);
+        add(&mut fonts, "arabic", bytes, 0);
     } else {
         log::warn!("police arabe introuvable : le texte arabe s'affichera mal");
     }
     let cjk = cjk_font_candidates(lang);
     match cjk
         .iter()
-        .find_map(|p| std::fs::read(p).ok().map(|b| (p, b)))
+        .find_map(|(p, i)| std::fs::read(p).ok().map(|b| (p, *i, b)))
     {
-        Some((path, bytes)) => {
-            log::info!("police {} : {path}", lang.code());
-            add(&mut fonts, "cjk", bytes);
+        Some((path, index, bytes)) => {
+            log::info!("police {} : {path} (n° {index})", lang.code());
+            add(&mut fonts, "cjk", bytes, index);
         }
         None if lang.is_cjk() => {
             log::warn!(
@@ -206,32 +208,104 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
     ctx.set_fonts(fonts);
 }
 
-/// Polices système (macOS) pour les écritures chinoise, japonaise et coréenne.
-fn cjk_font_candidates(lang: crate::i18n::Lang) -> &'static [&'static str] {
+/// Polices système (macOS) pour les écritures chinoise, japonaise et coréenne :
+/// (fichier, n° de la police dans un .ttc). Les caractères chinois partagés s'écrivent
+/// différemment en Chine, à Taïwan, à Hong Kong et au Japon : il faut la police de la
+/// région (PingFang.ttc : 0 = HK, 1 = TC, 2 = SC ; STHeiti Light.ttc : 0 = TC, 1 = SC ;
+/// vérifié par `cjk_fonts_match_the_region` et `ci/ttc_faces.py`).
+pub(crate) fn cjk_font_candidates(lang: crate::i18n::Lang) -> &'static [(&'static str, u32)] {
     use crate::i18n::Lang;
     match lang {
         Lang::Ja => &[
-            "/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc",
-            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-            "/System/Library/Fonts/Hiragino Sans GB.ttc",
-            "/System/Library/Fonts/PingFang.ttc",
+            ("/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc", 0),
+            ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
         ],
         Lang::Ko => &[
-            "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-            "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+            ("/System/Library/Fonts/AppleSDGothicNeo.ttc", 0),
+            ("/System/Library/Fonts/Supplemental/AppleGothic.ttf", 0),
         ],
         Lang::ZhHans => &[
-            "/System/Library/Fonts/PingFang.ttc",
-            "/System/Library/Fonts/Hiragino Sans GB.ttc",
-            "/System/Library/Fonts/STHeiti Light.ttc",
-            "/System/Library/Fonts/STHeiti Medium.ttc",
+            ("/System/Library/Fonts/PingFang.ttc", 2),
+            ("/System/Library/Fonts/STHeiti Light.ttc", 1),
+            ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
         ],
         Lang::ZhHant => &[
-            "/System/Library/Fonts/PingFang.ttc",
-            "/System/Library/Fonts/STHeiti Light.ttc",
-            "/System/Library/Fonts/STHeiti Medium.ttc",
-            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            ("/System/Library/Fonts/PingFang.ttc", 1),
+            ("/System/Library/Fonts/STHeiti Light.ttc", 0),
         ],
         _ => &[],
+    }
+}
+
+/// Nom complet (table `name`, anglais) de la police n° `index` d'un fichier .ttf/.ttc.
+#[cfg(test)]
+pub(crate) fn font_full_name(data: &[u8], index: u32) -> Option<String> {
+    let u16_at = |o: usize| Some(u16::from_be_bytes(data.get(o..o + 2)?.try_into().ok()?));
+    let u32_at = |o: usize| Some(u32::from_be_bytes(data.get(o..o + 4)?.try_into().ok()?));
+    let face = if data.get(0..4)? == b"ttcf" {
+        u32_at(12 + 4 * index as usize)? as usize
+    } else {
+        0
+    };
+    let tables = u16_at(face + 4)? as usize;
+    for t in 0..tables {
+        let rec = face + 12 + 16 * t;
+        if data.get(rec..rec + 4)? != b"name" {
+            continue;
+        }
+        let name = u32_at(rec + 8)? as usize;
+        let count = u16_at(name + 2)? as usize;
+        let strings = name + u16_at(name + 4)? as usize;
+        let mut fallback = None;
+        for r in 0..count {
+            let n = name + 6 + 12 * r;
+            let (platform, lang_id, id) = (u16_at(n)?, u16_at(n + 4)?, u16_at(n + 6)?);
+            let (len, off) = (u16_at(n + 8)? as usize, u16_at(n + 10)? as usize);
+            let raw = data.get(strings + off..strings + off + len)?;
+            if id == 4 && platform == 3 && lang_id == 0x409 {
+                let utf16: Vec<u16> = raw
+                    .chunks(2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect();
+                return String::from_utf16(&utf16).ok();
+            }
+            if id == 4 && platform == 1 {
+                fallback = Some(String::from_utf8_lossy(raw).into_owned());
+            }
+        }
+        return fallback;
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::Lang;
+
+    /// Sur un Mac : la police choisie pour chaque langue est bien celle de la région.
+    #[test]
+    fn cjk_fonts_match_the_region() {
+        if !std::path::Path::new("/System/Library/Fonts/PingFang.ttc").exists() {
+            return;
+        }
+        for (lang, expected) in [
+            (Lang::ZhHans, "SC"),
+            (Lang::ZhHant, "TC"),
+            (Lang::Ja, "Hiragino Sans"),
+            (Lang::Ko, "Gothic"),
+        ] {
+            let (path, index) = cjk_font_candidates(lang)
+                .iter()
+                .find(|(p, _)| std::path::Path::new(p).exists())
+                .unwrap_or_else(|| panic!("{} : aucune police", lang.code()));
+            let data = std::fs::read(path).unwrap();
+            let name = font_full_name(&data, *index).unwrap_or_default();
+            assert!(
+                name.contains(expected),
+                "{} : {path} n° {index} = « {name} », attendu « {expected} »",
+                lang.code()
+            );
+        }
     }
 }

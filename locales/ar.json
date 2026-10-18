@@ -34,7 +34,7 @@
   "row.delete": "حذف",
   "row.unmark_password": "ليست كلمة سر: اعرضها كنص عادي (⌘L)",
   "row.mark_password": "هذه كلمة سر: شفّرها وأخفِها (⌘L)",
-  "row.hidden_password_tip": "كلمة سر مخفية — انقر أو اضغط ↵ لنسخها",
+  "row.hidden_password_tip": "كلمة سر مخفية — انقر أو اضغط مفتاح الرجوع لنسخها",
   "row.image": "صورة",
   "row.file": "ملف",
   "row.files_more": "{name} و{n} غيره",

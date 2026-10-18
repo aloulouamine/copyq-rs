@@ -34,7 +34,7 @@
   "row.delete": "刪除",
   "row.unmark_password": "不是密碼:以明文顯示(⌘L)",
   "row.mark_password": "這是密碼:加密並隱藏(⌘L)",
-  "row.hidden_password_tip": "隱藏的密碼——點按或按 ↵ 拷貝",
+  "row.hidden_password_tip": "隱藏的密碼——點按或按下 return 鍵拷貝",
   "row.image": "影像",
   "row.file": "檔案",
   "row.files_more": "{name} 等 {n} 項",

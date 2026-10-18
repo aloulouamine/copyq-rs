@@ -422,40 +422,44 @@ mod tests {
                 if lang.is_rtl() {
                     continue;
                 }
-                // Gauche à droite : position croissante dans l'ordre du texte.
-                let galley = ctx.fonts_mut(|f| {
-                    f.layout(
-                        text.clone(),
-                        FontId::proportional(11.5),
-                        Color32::WHITE,
-                        300.0,
-                    )
-                });
-                for row in galley.rows.iter() {
-                    let xs: Vec<f32> = row
-                        .glyphs
-                        .iter()
-                        .filter(|g| g.advance_width > 0.01)
-                        .map(|g| g.pos.x)
-                        .collect();
-                    if xs.windows(2).any(|w| w[1] + 0.5 < w[0]) {
-                        problems.push(format!("{} {key} : ordre gauche-droite rompu", lang.code()));
-                    }
-                    let first = row
-                        .glyphs
-                        .iter()
-                        .map(|g| g.chr)
-                        .find(|c| !c.is_whitespace());
-                    if galley.rows.len() > 1
-                        && first.is_some_and(|c| closing.contains(c))
-                        && matches!(lang, Lang::Ja | Lang::ZhHans | Lang::ZhHant | Lang::Ko)
-                    {
-                        let line: String = row.glyphs.iter().map(|g| g.chr).collect();
-                        problems.push(format!(
-                            "{} {key} : ligne qui commence par « {} » : {line}",
-                            lang.code(),
-                            first.unwrap()
-                        ));
+                // Gauche à droite : position croissante dans l'ordre du texte, à
+                // plusieurs largeurs (le panneau Réglages, les infos-bulles…).
+                for width in [160.0, 220.0, 280.0, 340.0] {
+                    let galley = ctx.fonts_mut(|f| {
+                        f.layout(
+                            text.clone(),
+                            FontId::proportional(11.5),
+                            Color32::WHITE,
+                            width,
+                        )
+                    });
+                    for row in galley.rows.iter() {
+                        let xs: Vec<f32> = row
+                            .glyphs
+                            .iter()
+                            .filter(|g| g.advance_width > 0.01)
+                            .map(|g| g.pos.x)
+                            .collect();
+                        if xs.windows(2).any(|w| w[1] + 0.5 < w[0]) {
+                            problems
+                                .push(format!("{} {key} : ordre gauche-droite rompu", lang.code()));
+                        }
+                        let first = row
+                            .glyphs
+                            .iter()
+                            .map(|g| g.chr)
+                            .find(|c| !c.is_whitespace());
+                        if galley.rows.len() > 1
+                            && first.is_some_and(|c| closing.contains(c))
+                            && matches!(lang, Lang::Ja | Lang::ZhHans | Lang::ZhHant | Lang::Ko)
+                        {
+                            let line: String = row.glyphs.iter().map(|g| g.chr).collect();
+                            problems.push(format!(
+                                "{} {key} : ligne qui commence par « {} » : {line}",
+                                lang.code(),
+                                first.unwrap()
+                            ));
+                        }
                     }
                 }
             }
