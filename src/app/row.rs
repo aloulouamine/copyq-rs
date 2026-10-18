@@ -3,11 +3,12 @@
 use super::widgets::single_line;
 use crate::history::{self, History, ItemKind};
 use crate::logging::LockExt;
+use crate::media::{self, Variant};
 use crate::theme::Palette;
-use crate::{icons, media};
+use crate::{icons, keychain};
 use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui};
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use unicode_normalization::UnicodeNormalization;
 
 const PREVIEW_CHARS: usize = 160;
@@ -365,19 +366,43 @@ pub(super) fn image_hashes(history: &History) -> HashSet<&str> {
         .collect()
 }
 
-/// Charge la vignette d'une image enregistrée en texture egui.
-pub(super) fn load_thumbnail(ctx: &egui::Context, hash: &str) -> Option<egui::TextureHandle> {
-    let path = media::thumb_path(&media::images_dir(), hash);
-    match media::load_rgba(&path) {
-        Ok((w, h, rgba)) => {
-            let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
-            Some(ctx.load_texture(format!("thumb-{hash}"), img, egui::TextureOptions::LINEAR))
+/// Charge (et déchiffre) la vignette d'une image en texture egui.
+///
+/// `None` : pas encore possible, réessayer plus tard — la clé n'est pas prête, et le
+/// trousseau est alors interrogé dans un autre fil pour ne jamais bloquer l'interface.
+/// `Some(None)` : vignette illisible.
+pub(super) fn load_thumbnail(
+    ctx: &egui::Context,
+    hash: &str,
+) -> Option<Option<egui::TextureHandle>> {
+    let Some(cipher) = keychain::cipher_if_ready() else {
+        if keychain::key_error().is_some() {
+            return Some(None);
         }
-        Err(e) => {
-            log::warn!("vignette illisible : {e}");
-            None
-        }
-    }
+        static WARM_UP: Once = Once::new();
+        WARM_UP.call_once(|| {
+            let ctx = ctx.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = keychain::shared_cipher() {
+                    log::error!("vignettes illisibles : {e}");
+                }
+                ctx.request_repaint();
+            });
+        });
+        return None;
+    };
+    Some(
+        match media::load_rgba(&media::images_dir(), hash, Variant::Thumb, &cipher) {
+            Ok((w, h, rgba)) => {
+                let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                Some(ctx.load_texture(format!("thumb-{hash}"), img, egui::TextureOptions::LINEAR))
+            }
+            Err(e) => {
+                log::warn!("vignette illisible : {e}");
+                None
+            }
+        },
+    )
 }
 
 /// Remplace le dossier personnel par « ~ ».

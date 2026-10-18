@@ -2,7 +2,36 @@
 //! d'application » : service `com.amine.copyq-rs`, compte `history-encryption-key`).
 //! Elle n'est jamais écrite sur disque par l'app.
 
-use crate::crypto::{self, Key};
+use crate::crypto::{self, Cipher, Key};
+use std::sync::{Arc, OnceLock};
+
+/// Clé lue une seule fois par lancement : une autorisation du trousseau suffit pour
+/// la base (mots de passe) et les fichiers (images).
+static KEY: OnceLock<Result<Key, String>> = OnceLock::new();
+static CIPHER: OnceLock<Result<Arc<Cipher>, String>> = OnceLock::new();
+
+/// Clé partagée (peut afficher une demande d'autorisation du trousseau : à éviter
+/// sur le fil de l'interface).
+pub fn shared_key() -> Result<Key, String> {
+    KEY.get_or_init(load_or_create_key).clone()
+}
+
+/// Chiffreur partagé, construit au premier besoin.
+pub fn shared_cipher() -> Result<Arc<Cipher>, String> {
+    CIPHER
+        .get_or_init(|| shared_key().map(|k| Arc::new(Cipher::new(&k))))
+        .clone()
+}
+
+/// Chiffreur s'il est déjà prêt, sans jamais solliciter le trousseau (fil de l'interface).
+pub fn cipher_if_ready() -> Option<Arc<Cipher>> {
+    CIPHER.get().and_then(|r| r.as_ref().ok().cloned())
+}
+
+/// Erreur du trousseau, si la clé a été demandée et refusée.
+pub fn key_error() -> Option<String> {
+    KEY.get().and_then(|r| r.as_ref().err().cloned())
+}
 
 pub const SERVICE: &str = "com.amine.copyq-rs";
 pub const ACCOUNT: &str = "history-encryption-key";

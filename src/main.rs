@@ -51,8 +51,9 @@ fn main() -> eframe::Result<()> {
         storage::default_db_path(),
         Some(history::legacy_json_path()),
         Some(media::images_dir()),
-        // La clé n'est demandée au trousseau qu'au premier mot de passe à (dé)chiffrer.
-        Box::new(keychain::load_or_create_key),
+        // La clé n'est demandée au trousseau qu'au premier besoin (mot de passe ou
+        // image à chiffrer), et une seule fois pour la base et les images.
+        Box::new(keychain::shared_key),
     ) {
         Ok((store, items)) => history::History::with_store(store, items),
         Err(e) => {

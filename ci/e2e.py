@@ -103,6 +103,18 @@ def check(name, cond):
 
 subprocess.run([sys.executable, "ci/seed_history.py", os.path.join(DATA, "history.json")], check=True)
 
+# Image en clair laissée par une version précédente : doit être chiffrée au lancement.
+IMG_DIR = os.path.join(DATA, "images")
+os.makedirs(IMG_DIR, exist_ok=True)
+LEGACY = os.path.join(IMG_DIR, "ancienne" + uuid.uuid4().hex[:8])
+subprocess.run([sys.executable, "ci/make_png.py", LEGACY + ".png", "40", "20"], check=True)
+PNG_MAGIC = b"\x89PNG"
+
+
+def is_png(path):
+    with open(path, "rb") as f:
+        return f.read(4) == PNG_MAGIC
+
 log = open("e2e-app.log", "w")
 app = subprocess.Popen([BIN], stdout=log, stderr=subprocess.STDOUT)
 time.sleep(5)
@@ -118,6 +130,9 @@ try:
           b"hunter2-MotDePasse!" not in db_bytes())
     check("l'ordre est conservé à l'import", bool(texts) and texts[0] == "https://github.com/emilk/egui")
     check("le JSON est renommé après import", os.path.exists(os.path.join(DATA, "history.json.migrated")))
+    check("une image en clair d'une version précédente est chiffrée au lancement",
+          not os.path.exists(LEGACY + ".png") and os.path.exists(LEGACY + ".png.enc")
+          and not is_png(LEGACY + ".png.enc"))
 
     normal = f"texte-e2e-{uuid.uuid4().hex[:8]}"
     pbcopy(normal)
@@ -152,9 +167,12 @@ try:
         img_dir = os.path.join(DATA, "images")
         check("…avec ses dimensions", meta.startswith("321 × 123"))
         check("…et la taille du fichier, une fois encodé à part", " · " in meta)
-        check("…son fichier PNG et sa vignette",
-              os.path.exists(os.path.join(img_dir, h + ".png"))
-              and os.path.exists(os.path.join(img_dir, h + ".thumb.png")))
+        full = os.path.join(img_dir, h + ".png.enc")
+        thumb = os.path.join(img_dir, h + ".thumb.png.enc")
+        check("…son fichier et sa vignette", os.path.exists(full) and os.path.exists(thumb))
+        check("…chiffrés (aucune image en clair sur le disque)",
+              not is_png(full) and not is_png(thumb)
+              and not any(n.endswith(".png") for n in os.listdir(img_dir)))
     copy_png(png)
     time.sleep(1.5)
     check("la même image recopiée n'est pas dupliquée",

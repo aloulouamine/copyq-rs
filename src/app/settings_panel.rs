@@ -277,8 +277,9 @@ impl CopyApp {
         });
         caption(
             ui,
-            "Captures d'écran et images copiées (50 au plus). Les fichiers copiés dans le \
-             Finder (vidéos, sons, PDF…) sont toujours gardés, par leur emplacement.",
+            "Captures d'écran et images copiées, chiffrées sur le disque avec la clé du \
+             trousseau (nombre réglable dans Limites). Les fichiers copiés dans le Finder \
+             (vidéos, sons, PDF…) sont toujours gardés, par leur emplacement.",
             p,
         );
         ui.add_space(8.0);
@@ -368,8 +369,8 @@ impl CopyApp {
             ui.add(
                 egui::Label::new(
                     RichText::new(format!(
-                        "⚠ Trousseau inaccessible ({err}) : les mots de passe restent en mémoire, \
-                         sans être enregistrés."
+                        "⚠ Trousseau inaccessible ({err}) : les mots de passe restent en mémoire \
+                         sans être enregistrés, et les images ne sont pas gardées."
                     ))
                     .size(11.5)
                     .color(p.danger),

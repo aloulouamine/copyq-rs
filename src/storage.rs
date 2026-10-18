@@ -42,8 +42,11 @@ static GLOBAL: OnceLock<Store> = OnceLock::new();
 static ENCRYPTION_ERROR: OnceLock<String> = OnceLock::new();
 
 /// Raison pour laquelle le chiffrement est indisponible (trousseau refusé…), le cas échéant.
-pub fn encryption_error() -> Option<&'static str> {
-    ENCRYPTION_ERROR.get().map(String::as_str)
+pub fn encryption_error() -> Option<String> {
+    ENCRYPTION_ERROR
+        .get()
+        .cloned()
+        .or_else(crate::keychain::key_error)
 }
 
 impl Store {
@@ -796,7 +799,8 @@ mod tests {
         let db = dir.join("h.db");
         let images = dir.join("images");
         let px: Vec<u8> = vec![200; 4 * 4 * 4];
-        let saved = crate::media::save_rgba(&images, 4, 4, px).unwrap();
+        let cipher = crypto::Cipher::new(&k);
+        let saved = crate::media::save_rgba(&images, 4, 4, px, &cipher).unwrap();
         let image = Item {
             text: saved.hash.clone(),
             copied_at: 5,

@@ -607,8 +607,9 @@ impl CopyApp {
                 for row in rows {
                     if let Some(hash) = &row.thumb {
                         if !self.thumbs.contains_key(hash) {
-                            let tex = load_thumbnail(ctx, hash);
-                            self.thumbs.insert(hash.clone(), tex);
+                            if let Some(tex) = load_thumbnail(ctx, hash) {
+                                self.thumbs.insert(hash.clone(), tex);
+                            }
                         }
                     }
                 }

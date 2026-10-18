@@ -5,9 +5,11 @@
 //! ne lit le contenu que lorsqu'il a bougé. Les copies marquées confidentielles
 //! par les gestionnaires de mots de passe sont ignorées sans être lues.
 
+use crate::crypto::Cipher;
 use crate::history::{History, Item, ItemKind};
+use crate::keychain;
 use crate::logging::LockExt;
-use crate::media;
+use crate::media::{self, Variant};
 use crate::pasteboard::{self, Payload};
 use eframe::egui;
 use std::path::PathBuf;
@@ -120,20 +122,28 @@ struct Encoder {
     history: Arc<Mutex<History>>,
     dir: PathBuf,
     ctx: egui::Context,
+    /// Chiffreur des fichiers (clé du trousseau, demandée au premier besoin).
+    cipher: CipherSource,
 }
+
+/// Fournit le chiffreur (le trousseau en production, une clé de test sinon).
+type CipherSource = fn() -> Result<Arc<Cipher>, String>;
 
 impl Encoder {
     fn spawn(history: Arc<Mutex<History>>, dir: PathBuf, ctx: egui::Context) -> Self {
         let (tx, rx) = mpsc::sync_channel::<ImageJob>(2);
+        let cipher: CipherSource = keychain::shared_cipher;
         let worker = Encoder {
             tx: None,
             history: history.clone(),
             dir: dir.clone(),
             ctx: ctx.clone(),
+            cipher,
         };
         let tx = thread::Builder::new()
             .name("image-encoder".into())
             .spawn(move || {
+                worker.migrate_plain_images();
                 for job in rx {
                     worker.encode(job);
                 }
@@ -146,7 +156,24 @@ impl Encoder {
             history,
             dir,
             ctx,
+            cipher,
         }
+    }
+
+    /// Images en clair d'une version précédente : chiffrées une fois pour toutes.
+    /// Le trousseau n'est sollicité que s'il y en a.
+    fn migrate_plain_images(&self) {
+        if !media::has_plain(&self.dir) {
+            return;
+        }
+        match (self.cipher)() {
+            Ok(c) => {
+                let n = media::migrate_plain(&self.dir, &c);
+                log::info!("{n} fichier(s) image d'une version précédente désormais chiffré(s)");
+            }
+            Err(e) => log::error!("images en clair non chiffrées (trousseau : {e})"),
+        }
+        self.ctx.request_repaint();
     }
 
     fn submit(&self, job: ImageJob) {
@@ -168,7 +195,11 @@ impl Encoder {
             height,
             rgba,
         } = job;
-        match media::write(&self.dir, &hash, width, height, rgba) {
+        // Jamais d'image en clair : sans clé, l'image n'est pas gardée.
+        let written = (self.cipher)()
+            .map_err(|e| format!("trousseau inaccessible ({e})"))
+            .and_then(|c| media::write(&self.dir, &hash, width, height, rgba, &c));
+        match written {
             Ok(size) => {
                 let mut h = self.history.lock_safe();
                 if h.has_image(&hash) {
@@ -349,9 +380,13 @@ pub fn write_item(clipboard: &mut arboard::Clipboard, item: &Item) -> Result<(),
             .set_text(item.text.clone())
             .map_err(|e| e.to_string()),
         ItemKind::Image => {
-            let path = media::full_path(&media::images_dir(), &item.text);
+            let cipher = keychain::shared_cipher()?;
             let (w, h, rgba) =
-                media::load_rgba(&path).map_err(|_| "image introuvable".to_string())?;
+                media::load_rgba(&media::images_dir(), &item.text, Variant::Full, &cipher)
+                    .map_err(|e| {
+                        log::warn!("image illisible : {e}");
+                        "image introuvable ou illisible".to_string()
+                    })?;
             clipboard
                 .set_image(arboard::ImageData {
                     width: w as usize,
@@ -388,17 +423,14 @@ pub fn media_selftest() -> i32 {
     let px: Vec<u8> = (0..64 * 32)
         .flat_map(|i| [(i % 256) as u8, 80, 160, 255])
         .collect();
-    let saved = media::save_rgba(&dir, 64, 32, px).expect("image de test");
+    // Clé jetable : l'auto-test ne touche pas au trousseau.
+    let cipher = Cipher::new(&crate::crypto::generate_key());
+    let saved = media::save_rgba(&dir, 64, 32, px, &cipher).expect("image de test");
     println!("image de test enregistrée : {}", saved.meta);
 
-    // Recopie d'image : on lit directement le fichier enregistré.
-    let img = Item {
-        text: saved.hash.clone(),
-        kind: ItemKind::Image,
-        ..Default::default()
-    };
+    // Recopie d'image : on relit (et déchiffre) le fichier enregistré.
     let path = media::full_path(&dir, &saved.hash);
-    let (w, h, rgba) = media::load_rgba(&path).unwrap();
+    let (w, h, rgba) = media::load_rgba(&dir, &saved.hash, Variant::Full, &cipher).unwrap();
     let wrote = cb
         .set_image(arboard::ImageData {
             width: w as usize,
@@ -411,7 +443,6 @@ pub fn media_selftest() -> i32 {
     let back = cb.get_image().map(|i| (i.width, i.height)).ok();
     println!("image : écrite={wrote} types={types:?} → {payload:?}, relue {back:?}");
     ok &= wrote && payload == Payload::Image && back == Some((64, 32));
-    let _ = img;
 
     // Recopie de fichiers.
     let files = vec![path.clone(), media::thumb_path(&dir, &saved.hash)];
@@ -443,11 +474,19 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("copyq-rs-encoder-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let history = Arc::new(Mutex::new(History::default()));
+        fn test_cipher() -> Result<Arc<Cipher>, String> {
+            static C: std::sync::OnceLock<Arc<Cipher>> = std::sync::OnceLock::new();
+            Ok(
+                C.get_or_init(|| Arc::new(Cipher::new(&crate::crypto::generate_key())))
+                    .clone(),
+            )
+        }
         let enc = Encoder {
             tx: None,
             history: history.clone(),
             dir: dir.clone(),
             ctx: egui::Context::default(),
+            cipher: test_cipher,
         };
         let job = |seed: u8| {
             let rgba = vec![seed; 8 * 4 * 4];
