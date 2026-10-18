@@ -29,6 +29,8 @@ pub struct Settings {
     pub max_image_mp: u32,
     /// 0 = conservation illimitée.
     pub retention_days: u32,
+    /// Langue de l'interface : « auto » (celle de macOS) ou un code (`i18n::Lang::code`).
+    pub language: String,
 }
 
 impl Default for Settings {
@@ -45,9 +47,13 @@ impl Default for Settings {
             max_total_mb: crate::history::MAX_TOTAL_BYTES / 1_000_000,
             max_image_mp: (crate::media::MAX_PIXELS / 1_000_000) as u32,
             retention_days: 0,
+            language: AUTO_LANGUAGE.to_string(),
         }
     }
 }
+
+/// Valeur du réglage de langue qui suit macOS.
+pub const AUTO_LANGUAGE: &str = "auto";
 
 /// Bornes proposées dans l'interface (et appliquées à la lecture du fichier).
 pub const ITEMS_RANGE: std::ops::RangeInclusive<usize> = 10..=10_000;
@@ -55,14 +61,17 @@ pub const IMAGES_RANGE: std::ops::RangeInclusive<usize> = 0..=500;
 pub const TEXT_KB_RANGE: std::ops::RangeInclusive<usize> = 1..=10_000;
 pub const TOTAL_MB_RANGE: std::ops::RangeInclusive<usize> = 10..=2_000;
 pub const IMAGE_MP_RANGE: std::ops::RangeInclusive<u32> = 1..=200;
-pub const RETENTION_CHOICES: [(u32, &str); 6] = [
-    (0, "Illimitée"),
-    (1, "1 jour"),
-    (7, "7 jours"),
-    (30, "30 jours"),
-    (90, "90 jours"),
-    (365, "1 an"),
-];
+pub const RETENTION_CHOICES: [u32; 6] = [0, 1, 7, 30, 90, 365];
+
+/// Libellé d'une durée de conservation, dans la langue de l'interface.
+pub fn retention_label(days: u32) -> String {
+    match days {
+        0 => t!("retention.unlimited").to_string(),
+        1 => t!("retention.day").to_string(),
+        365 => t!("retention.year").to_string(),
+        n => t!("retention.days", n = n),
+    }
+}
 
 impl Settings {
     /// Limites de l'historique correspondant à ces réglages.
@@ -210,6 +219,7 @@ mod tests {
             max_total_mb: 50,
             max_image_mp: 12,
             retention_days: 30,
+            language: "ja".into(),
         };
         s.save(&path);
         assert_eq!(Settings::load(&path), s);

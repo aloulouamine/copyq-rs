@@ -6,13 +6,28 @@ use std::error::Error;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+/// Icône et entrées de son menu (gardées pour les renommer au changement de langue).
+/// Doit rester vivant : le détruire retire l'icône.
+pub struct Tray {
+    _icon: TrayIcon,
+    show: MenuItem,
+    quit: MenuItem,
+}
+
+impl Tray {
+    /// Libellés dans la langue de l'interface.
+    pub fn relabel(&self) {
+        self.show.set_text(t!("tray.show"));
+        self.quit.set_text(t!("tray.quit"));
+    }
+}
+
 /// Crée l'icône. Doit être appelée sur le thread principal, une fois la boucle
 /// d'événements démarrée (c'est le cas dans le « creator » d'eframe).
-/// Le `TrayIcon` renvoyé doit rester vivant : le détruire retire l'icône.
-pub fn create(ctx: &egui::Context) -> Result<TrayIcon, Box<dyn Error>> {
+pub fn create(ctx: &egui::Context) -> Result<Tray, Box<dyn Error>> {
     let menu = Menu::new();
-    let show = MenuItem::new("Afficher l'historique", true, None);
-    let quit = MenuItem::new("Quitter", true, None);
+    let show = MenuItem::new(t!("tray.show"), true, None);
+    let quit = MenuItem::new(t!("tray.quit"), true, None);
     menu.append(&show)?;
     menu.append(&PredefinedMenuItem::separator())?;
     menu.append(&quit)?;
@@ -37,7 +52,11 @@ pub fn create(ctx: &egui::Context) -> Result<TrayIcon, Box<dyn Error>> {
         // Gabarit : macOS adapte la couleur au thème de la barre des menus.
         .with_icon_templated(icon()?)
         .build()?;
-    Ok(tray)
+    Ok(Tray {
+        _icon: tray,
+        show,
+        quit,
+    })
 }
 
 /// Dessine une petite icône « presse-papiers » 32×32 (monochrome, adaptée au mode

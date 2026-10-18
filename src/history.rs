@@ -126,8 +126,9 @@ impl Item {
     /// Texte de recherche (voir `fold`), calculé une seule fois.
     pub fn search_key(&self) -> &str {
         self.cache.search.get_or_init(|| match self.kind {
-            // Une image se retrouve en cherchant « image » ou ses dimensions.
-            ItemKind::Image => fold(&format!("image {}", self.meta)),
+            // Une image se retrouve en cherchant « image » (ou le mot dans la langue de
+            // l'interface) ou ses dimensions.
+            ItemKind::Image => fold(&format!("image {} {}", t!("row.image"), self.meta)),
             _ => fold(&self.text),
         })
     }
@@ -541,14 +542,14 @@ pub fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Durée relative lisible en français (« à l'instant », « il y a 5 min »…).
+/// Durée relative dans la langue de l'interface (« à l'instant », « 5 min ago »…).
 pub fn relative_time(then: u64, now: u64) -> String {
     let d = now.saturating_sub(then);
     match d {
-        0..=59 => "à l'instant".to_string(),
-        60..=3_599 => format!("il y a {} min", d / 60),
-        3_600..=86_399 => format!("il y a {} h", d / 3_600),
-        _ => format!("il y a {} j", d / 86_400),
+        0..=59 => t!("time.now").to_string(),
+        60..=3_599 => t!("time.minutes", n = d / 60),
+        3_600..=86_399 => t!("time.hours", n = d / 3_600),
+        _ => t!("time.days", n = d / 86_400),
     }
 }
 

@@ -207,7 +207,7 @@ pub(super) fn row_ui(
         let del = ui
             .interact(action_rect, resp.id.with("delete"), Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("Supprimer");
+            .on_hover_text(t!("row.delete"));
         if del.hovered() {
             painter.rect_filled(action_rect, 7.0, p.danger.gamma_multiply(0.15));
         }
@@ -229,9 +229,9 @@ pub(super) fn row_ui(
             ui.interact(lock_rect, resp.id.with("lock"), Sense::click())
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .on_hover_text(if row.sensitive {
-                    "Ce n'est pas un mot de passe : afficher en clair (⌘L)"
+                    t!("row.unmark_password")
                 } else {
-                    "C'est un mot de passe : chiffrer et masquer (⌘L)"
+                    t!("row.mark_password")
                 })
         });
         if let Some(lock) = lock {
@@ -271,7 +271,7 @@ pub(super) fn row_ui(
             return;
         }
         let text = if row.sensitive {
-            "Mot de passe masqué — cliquez ou ↵ pour le copier".to_string()
+            t!("row.hidden_password_tip").to_string()
         } else {
             tooltip(hist, row.index)
         };
@@ -315,9 +315,9 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
         ItemKind::Text => {}
         ItemKind::Image => {
             row.kind = Kind::Image;
-            row.title = "Image".into();
+            row.title = t!("row.image").into();
             row.thumb = Some(it.text.clone());
-            row.detail = it.meta.clone();
+            row.detail = media::display_meta(&it.meta);
         }
         ItemKind::Files => {
             let paths = it.paths();
@@ -329,9 +329,9 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
                     .unwrap_or_else(|| p.display().to_string().nfc().collect())
             };
             row.title = match paths.len() {
-                0 => "Fichier".into(),
+                0 => t!("row.file").into(),
                 1 => name(&paths[0]),
-                n => format!("{} + {} autre(s)", name(&paths[0]), n - 1),
+                n => t!("row.files_more", name = name(&paths[0]), n = n - 1),
             };
             row.kind = if paths.len() == 1 && paths[0].is_dir() {
                 Kind::Folder
@@ -345,9 +345,9 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
                 .unwrap_or_default();
             let missing = !paths.iter().all(|p| p.exists());
             row.detail = if missing {
-                format!("{parent}  ·  introuvable")
+                format!("{parent}  ·  {}", t!("row.missing"))
             } else if paths.len() > 1 {
-                format!("{} fichiers  ·  {parent}", paths.len())
+                format!("{}  ·  {parent}", t!("row.files_count", n = paths.len()))
             } else {
                 parent
             };
@@ -431,20 +431,23 @@ fn meta_text(row: &Row, now: u64) -> String {
     }
     if row.sensitive {
         return format!(
-            "mot de passe  ·  {}",
+            "{}  ·  {}",
+            t!("row.password"),
             history::relative_time(row.copied_at, now)
         );
     }
     let mut parts = vec![history::relative_time(row.copied_at, now)];
     if row.lines > 1 {
-        parts.push(format!("{} lignes", row.lines));
+        parts.push(t!("row.lines", n = row.lines));
     }
     parts.push(if row.chars < 1000 {
-        format!("{} car.", row.chars)
+        t!("row.chars", n = row.chars)
     } else {
-        // Virgule décimale sur le nombre seul (pas sur « car. »).
-        let k = format!("{:.1}", row.chars as f32 / 1000.0).replace('.', ",");
-        format!("{k} k car.")
+        // Séparateur décimal de la langue sur le nombre seul (pas sur « car. »).
+        t!(
+            "row.kchars",
+            n = crate::i18n::decimal(row.chars as f64 / 1000.0)
+        )
     });
     parts.join("  ·  ")
 }

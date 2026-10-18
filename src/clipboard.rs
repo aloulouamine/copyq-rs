@@ -380,12 +380,15 @@ pub fn write_item(clipboard: &mut arboard::Clipboard, item: &Item) -> Result<(),
             .set_text(item.text.clone())
             .map_err(|e| e.to_string()),
         ItemKind::Image => {
-            let cipher = keychain::shared_cipher()?;
+            let cipher = keychain::shared_cipher().map_err(|e| {
+                log::warn!("recopie d'image impossible : {e}");
+                t!("error.keychain").to_string()
+            })?;
             let (w, h, rgba) =
                 media::load_rgba(&media::images_dir(), &item.text, Variant::Full, &cipher)
                     .map_err(|e| {
                         log::warn!("image illisible : {e}");
-                        "image introuvable ou illisible".to_string()
+                        t!("error.image_unreadable").to_string()
                     })?;
             clipboard
                 .set_image(arboard::ImageData {
@@ -398,12 +401,12 @@ pub fn write_item(clipboard: &mut arboard::Clipboard, item: &Item) -> Result<(),
         ItemKind::Files => {
             let existing: Vec<_> = item.paths().into_iter().filter(|p| p.exists()).collect();
             if existing.is_empty() {
-                return Err("fichier(s) introuvable(s) — déplacé(s) ou supprimé(s) ?".into());
+                return Err(t!("error.files_missing").into());
             }
             if pasteboard::write_file_paths(&existing) {
                 Ok(())
             } else {
-                Err("écriture des fichiers dans le presse-papiers impossible".into())
+                Err(t!("error.files_write").into())
             }
         }
     }

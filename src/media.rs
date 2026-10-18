@@ -110,9 +110,38 @@ pub fn dimensions(width: u32, height: u32) -> String {
     format!("{width} × {height}")
 }
 
-/// Description complète (« 1280 × 720 · 245 Ko »).
+/// Description enregistrée en base, indépendante de la langue : « 1280 × 720 · 245000 »
+/// (taille en octets). L'affichage passe par `display_meta`.
 pub fn describe(width: u32, height: u32, file_size: u64) -> String {
-    format!("{} · {}", dimensions(width, height), human_size(file_size))
+    format!("{} · {file_size}", dimensions(width, height))
+}
+
+/// Description affichée, dans la langue de l'interface (« 1280 × 720 · 245 KB »).
+/// Comprend aussi l'ancien format, en français (« 245 Ko », « 3,4 Mo »).
+pub fn display_meta(meta: &str) -> String {
+    let Some((dims, size)) = meta.split_once(" · ") else {
+        return meta.to_string();
+    };
+    match parse_size(size) {
+        Some(bytes) => format!("{dims} · {}", human_size(bytes)),
+        None => meta.to_string(),
+    }
+}
+
+/// Taille en octets : nombre seul, ou ancien format français (« 512 o », « 245 Ko », « 3,4 Mo »).
+fn parse_size(s: &str) -> Option<u64> {
+    if let Ok(n) = s.parse() {
+        return Some(n);
+    }
+    let (number, unit) = s.split_once(' ')?;
+    let value: f64 = number.replace(',', ".").parse().ok()?;
+    let factor = match unit {
+        "o" => 1.0,
+        "Ko" => 1e3,
+        "Mo" => 1e6,
+        _ => return None,
+    };
+    Some((value * factor).round() as u64)
 }
 
 /// Taille du fichier d'une image déjà enregistrée.
@@ -288,9 +317,12 @@ pub fn remove_all(dir: &Path) {
 
 pub fn human_size(bytes: u64) -> String {
     match bytes {
-        0..=999 => format!("{bytes} o"),
-        1_000..=999_999 => format!("{} Ko", bytes / 1_000),
-        _ => format!("{:.1} Mo", bytes as f64 / 1_000_000.0).replace('.', ","),
+        0..=999 => t!("size.bytes", n = bytes),
+        1_000..=999_999 => t!("size.kb", n = bytes / 1_000),
+        _ => t!(
+            "size.mb",
+            n = crate::i18n::decimal(bytes as f64 / 1_000_000.0)
+        ),
     }
 }
 
@@ -390,5 +422,19 @@ mod tests {
         assert_eq!(human_size(512), "512 o");
         assert_eq!(human_size(245_000), "245 Ko");
         assert_eq!(human_size(3_400_000), "3,4 Mo");
+    }
+
+    #[test]
+    fn stored_description_is_language_neutral_and_old_ones_still_display() {
+        let meta = describe(1280, 720, 245_000);
+        assert_eq!(meta, "1280 × 720 · 245000");
+        assert_eq!(display_meta(&meta), "1280 × 720 · 245 Ko");
+        assert_eq!(display_meta("1280 × 720 · 3,4 Mo"), "1280 × 720 · 3,4 Mo");
+        assert_eq!(display_meta("8 × 4 · 512 o"), "8 × 4 · 512 o");
+        assert_eq!(
+            display_meta("1280 × 720"),
+            "1280 × 720",
+            "taille pas encore connue"
+        );
     }
 }

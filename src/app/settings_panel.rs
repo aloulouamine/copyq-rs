@@ -6,7 +6,7 @@ use crate::history;
 use crate::logging::LockExt;
 use crate::settings;
 use crate::theme::Palette;
-use crate::{login_item, paste, storage};
+use crate::{i18n, login_item, paste, storage};
 use eframe::egui::{self, Color32, RichText, Stroke, Ui};
 use std::sync::atomic::Ordering;
 
@@ -16,11 +16,16 @@ impl CopyApp {
         ui.set_width(330.0);
         ui.spacing_mut().item_spacing.y = 4.0;
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Réglages").size(13.5).color(p.text).strong());
+            ui.label(
+                RichText::new(t!("settings.title"))
+                    .size(13.5)
+                    .color(p.text)
+                    .strong(),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 for (tab, label) in [
-                    (SettingsTab::Limits, "Limites"),
-                    (SettingsTab::General, "Général"),
+                    (SettingsTab::Limits, t!("settings.tab_limits")),
+                    (SettingsTab::General, t!("settings.tab_general")),
                 ] {
                     let active = self.settings_tab == tab;
                     let text = RichText::new(label).size(12.5).color(if active {
@@ -82,8 +87,8 @@ impl CopyApp {
         };
         row(
             ui,
-            "Nombre d'éléments",
-            "Au-delà, les plus anciens sont supprimés.",
+            t!("limits.items"),
+            t!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_items)
@@ -94,64 +99,60 @@ impl CopyApp {
         );
         row(
             ui,
-            "Nombre d'images",
-            "Comptées dans le total ; 0 = aucune image gardée.",
+            t!("limits.images"),
+            t!("limits.images_help"),
             &mut |ui| {
                 ui.add(egui::DragValue::new(&mut draft.max_images).range(settings::IMAGES_RANGE));
             },
         );
         row(
             ui,
-            "Taille d'un texte",
-            "Un texte plus long est ignoré.",
+            t!("limits.text_size"),
+            t!("limits.text_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_text_kb)
                         .range(settings::TEXT_KB_RANGE)
                         .speed(10.0)
-                        .suffix(" Ko"),
+                        .suffix(t!("limits.unit_kb")),
                 );
             },
         );
         row(
             ui,
-            "Taille totale des textes",
-            "Au-delà, les plus anciens sont supprimés.",
+            t!("limits.total_size"),
+            t!("limits.oldest_deleted"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_total_mb)
                         .range(settings::TOTAL_MB_RANGE)
                         .speed(5.0)
-                        .suffix(" Mo"),
+                        .suffix(t!("limits.unit_mb")),
                 );
             },
         );
         row(
             ui,
-            "Taille d'une image",
-            "Une image plus grande est ignorée.",
+            t!("limits.image_size"),
+            t!("limits.image_size_help"),
             &mut |ui| {
                 ui.add(
                     egui::DragValue::new(&mut draft.max_image_mp)
                         .range(settings::IMAGE_MP_RANGE)
-                        .suffix(" Mpx"),
+                        .suffix(t!("limits.unit_mpx")),
                 );
             },
         );
         row(
             ui,
-            "Conservation",
-            "Les éléments plus anciens sont effacés automatiquement.",
+            t!("limits.retention"),
+            t!("limits.retention_help"),
             &mut |ui| {
-                let current = settings::RETENTION_CHOICES
-                    .iter()
-                    .find(|(d, _)| *d == draft.retention_days)
-                    .map(|(_, l)| l.to_string())
-                    .unwrap_or_else(|| format!("{} jours", draft.retention_days));
                 egui::ComboBox::from_id_salt("retention")
-                    .selected_text(current)
+                    .selected_text(settings::retention_label(draft.retention_days))
                     .show_ui(ui, |ui| {
-                        for (days, label) in settings::RETENTION_CHOICES {
+                        for days in settings::RETENTION_CHOICES {
+                            let label = settings::retention_label(days);
                             ui.selectable_value(&mut draft.retention_days, days, label);
                         }
                     });
@@ -163,26 +164,27 @@ impl CopyApp {
         ui.horizontal(|ui| {
             let defaults = self.settings.with_default_limits();
             if draft != defaults
-                && ghost_button(ui, "Valeurs par défaut", p.text_muted, p).clicked()
+                && ghost_button(ui, t!("limits.defaults"), p.text_muted, p).clicked()
             {
                 draft = defaults;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if pending {
-                    let apply = egui::Button::new(RichText::new("Appliquer").color(Color32::WHITE))
-                        .fill(p.accent)
-                        .corner_radius(7.0);
+                    let apply =
+                        egui::Button::new(RichText::new(t!("limits.apply")).color(Color32::WHITE))
+                            .fill(p.accent)
+                            .corner_radius(7.0);
                     if ui.add(apply).clicked() {
                         self.settings = draft.clone();
                         let removed = self.apply_limits();
                         self.notify(if removed > 0 {
-                            format!("Limites appliquées : {removed} élément(s) supprimé(s)")
+                            t!("toast.limits_applied_removed", n = removed)
                         } else {
-                            "Limites appliquées".to_string()
+                            t!("toast.limits_applied").to_string()
                         });
                         changed = true;
                     }
-                    if ghost_button(ui, "Annuler", p.text_muted, p).clicked() {
+                    if ghost_button(ui, t!("footer.cancel"), p.text_muted, p).clicked() {
                         draft = self.settings.clone();
                     }
                 }
@@ -195,7 +197,7 @@ impl CopyApp {
                 .would_remove(draft.limits(), history::now_secs());
             if n > 0 {
                 ui.label(
-                    RichText::new(format!("⚠ {n} élément(s) seront supprimés définitivement."))
+                    RichText::new(t!("limits.will_remove", n = n))
                         .size(11.5)
                         .color(p.danger),
                 );
@@ -207,12 +209,13 @@ impl CopyApp {
 
     /// Onglet « Général ». Renvoie vrai si un réglage a changé.
     fn general_settings_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
-        let mut changed = false;
+        let mut changed = self.language_ui(ui, p);
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
             if toggle(
                 ui,
                 &mut self.settings.auto_paste,
-                "Coller automatiquement",
+                t!("general.auto_paste"),
                 p,
             )
             .changed()
@@ -223,20 +226,15 @@ impl CopyApp {
                 }
             }
         });
-        caption(
-            ui,
-            "L'élément choisi est collé directement dans l'application d'où vous avez ouvert \
-             l'historique (⌘⇧Z).",
-            p,
-        );
+        caption(ui, t!("general.auto_paste_help"), p);
         if self.settings.auto_paste && !paste::is_trusted() {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
-                    RichText::new("⚠ Autorisation « Accessibilité » requise.")
+                    RichText::new(t!("general.accessibility_needed"))
                         .size(11.5)
                         .color(p.danger),
                 );
-                if ghost_button(ui, "Ouvrir les réglages", p.accent, p).clicked() {
+                if ghost_button(ui, t!("general.open_settings"), p.accent, p).clicked() {
                     paste::open_accessibility_settings();
                 }
             });
@@ -247,16 +245,12 @@ impl CopyApp {
                 changed |= toggle(
                     ui,
                     &mut self.settings.hide_after_copy,
-                    "Masquer après copie",
+                    t!("general.hide_after_copy"),
                     p,
                 )
                 .changed();
             });
-            caption(
-                ui,
-                "La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.",
-                p,
-            );
+            caption(ui, t!("general.hide_after_copy_help"), p);
             ui.add_space(8.0);
         }
 
@@ -264,7 +258,7 @@ impl CopyApp {
             if toggle(
                 ui,
                 &mut self.settings.save_images,
-                "Enregistrer les images",
+                t!("general.save_images"),
                 p,
             )
             .changed()
@@ -275,13 +269,7 @@ impl CopyApp {
                     .store(self.settings.save_images, Ordering::Relaxed);
             }
         });
-        caption(
-            ui,
-            "Captures d'écran et images copiées, chiffrées sur le disque avec la clé du \
-             trousseau (nombre réglable dans Limites). Les fichiers copiés dans le Finder \
-             (vidéos, sons, PDF…) sont toujours gardés, par leur emplacement.",
-            p,
-        );
+        caption(ui, t!("general.save_images_help"), p);
         ui.add_space(8.0);
 
         let available = self.login_status != login_item::Status::Unavailable;
@@ -291,7 +279,7 @@ impl CopyApp {
         );
         let resp = ui
             .add_enabled_ui(available, |ui| {
-                ui.horizontal(|ui| toggle(ui, &mut on, "Ouvrir au démarrage", p))
+                ui.horizontal(|ui| toggle(ui, &mut on, t!("general.open_at_login"), p))
                     .inner
             })
             .inner;
@@ -301,9 +289,9 @@ impl CopyApp {
         caption(
             ui,
             if available {
-                "Lance CopyQ-rs à l'ouverture de votre session."
+                t!("general.open_at_login_help")
             } else {
-                "Disponible une fois l'app installée en tant qu'application (.app)."
+                t!("general.open_at_login_unavailable")
             },
             p,
         );
@@ -313,7 +301,7 @@ impl CopyApp {
             if toggle(
                 ui,
                 &mut self.settings.save_passwords,
-                "Enregistrer les mots de passe",
+                t!("general.save_passwords"),
                 p,
             )
             .changed()
@@ -328,19 +316,13 @@ impl CopyApp {
                 );
             }
         });
-        caption(
-            ui,
-            "Copies marquées confidentielles par 1Password, Bitwarden, le trousseau… \
-             Chiffrées sur le disque avec une clé gardée dans le trousseau macOS, \
-             affichées masquées et exclues de la recherche.",
-            p,
-        );
+        caption(ui, t!("general.save_passwords_help"), p);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             if toggle(
                 ui,
                 &mut self.settings.detect_passwords,
-                "Détecter les mots de passe",
+                t!("general.detect_passwords"),
                 p,
             )
             .changed()
@@ -355,25 +337,16 @@ impl CopyApp {
                 );
             }
         });
-        caption(
-            ui,
-            "Pour les extensions de navigateur (Dashlane, 1Password, Bitwarden…) qui ne \
-             signalent pas leurs copies : un texte sans espace de 8 à 128 caractères mêlant \
-             majuscules, minuscules et chiffres. ⌘L corrige une erreur sur un élément.",
-            p,
-        );
+        caption(ui, t!("general.detect_passwords_help"), p);
         if changed && self.settings.detect_passwords {
             self.reclassify();
         }
         if let Some(err) = storage::encryption_error() {
             ui.add(
                 egui::Label::new(
-                    RichText::new(format!(
-                        "⚠ Trousseau inaccessible ({err}) : les mots de passe restent en mémoire \
-                         sans être enregistrés, et les images ne sont pas gardées."
-                    ))
-                    .size(11.5)
-                    .color(p.danger),
+                    RichText::new(t!("general.keychain_error", error = err))
+                        .size(11.5)
+                        .color(p.danger),
                 )
                 .wrap(),
             );
@@ -382,16 +355,57 @@ impl CopyApp {
         if stored > 0 {
             ui.add_space(4.0);
             let label = if stored == 1 {
-                "Effacer le mot de passe enregistré".to_string()
+                t!("general.erase_password").to_string()
             } else {
-                format!("Effacer les {stored} mots de passe enregistrés")
+                t!("general.erase_passwords", n = stored)
             };
             if ghost_button(ui, &label, p.danger, p).clicked() {
                 let n = self.history.lock_safe().remove_sensitive();
-                self.notify(format!("{n} mot(s) de passe effacé(s)"));
+                self.notify(t!("toast.passwords_erased", n = n));
             }
         }
 
+        changed
+    }
+
+    /// Choix de la langue : « Système (…) » ou l'une des langues traduites.
+    fn language_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
+        let system = i18n::detect();
+        let label = |code: &str| match i18n::Lang::from_code(code) {
+            Some(lang) => lang.native_name().to_string(),
+            None => t!("settings.language_auto", name = system.native_name()),
+        };
+        let before = self.settings.language.clone();
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(t!("settings.language"))
+                    .size(12.5)
+                    .color(p.text_muted),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                egui::ComboBox::from_id_salt("language")
+                    .selected_text(label(&self.settings.language))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.settings.language,
+                            settings::AUTO_LANGUAGE.to_string(),
+                            label(settings::AUTO_LANGUAGE),
+                        );
+                        for lang in i18n::ALL {
+                            ui.selectable_value(
+                                &mut self.settings.language,
+                                lang.code().to_string(),
+                                lang.native_name(),
+                            );
+                        }
+                    });
+            });
+        });
+        let changed = self.settings.language != before;
+        if changed {
+            let ctx = ui.ctx().clone();
+            self.apply_language(&ctx);
+        }
         changed
     }
 }

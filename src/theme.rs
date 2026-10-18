@@ -56,8 +56,8 @@ pub fn palette_ctx(ctx: &egui::Context) -> Palette {
 }
 
 /// Installe polices et styles (à appeler une fois au démarrage).
-pub fn install(ctx: &egui::Context) {
-    install_fonts(ctx);
+pub fn install(ctx: &egui::Context, lang: crate::i18n::Lang) {
+    install_fonts(ctx, lang);
     ctx.set_style_of(egui::Theme::Dark, style(egui::Visuals::dark(), &DARK));
     ctx.set_style_of(egui::Theme::Light, style(egui::Visuals::light(), &LIGHT));
 
@@ -135,24 +135,76 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
     s
 }
 
-/// Utilise la police système de macOS (SF Pro) si elle est disponible,
-/// en gardant les polices d'egui en secours (emoji, symboles).
-fn install_fonts(ctx: &egui::Context) {
-    let candidates = [
+/// Utilise la police système de macOS (SF Pro) si elle est disponible, plus une police
+/// chinoise, japonaise ou coréenne du système quand l'interface est dans l'une de ces
+/// langues, en gardant les polices d'egui en secours (emoji, symboles).
+pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
+    let mut fonts = egui::FontDefinitions::default();
+    let mut first = 0;
+    let mut add = |fonts: &mut egui::FontDefinitions, name: &str, bytes: Vec<u8>| {
+        fonts.font_data.insert(
+            name.to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        if let Some(family) = fonts.families.get_mut(&FontFamily::Proportional) {
+            family.insert(first, name.to_owned());
+            first += 1;
+        }
+    };
+    let system = [
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSText.ttf",
         "/Library/Fonts/SF-Pro-Text-Regular.otf",
     ];
-    let Some(bytes) = candidates.iter().find_map(|p| std::fs::read(p).ok()) else {
-        return;
-    };
-    let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert(
-        "system".to_owned(),
-        std::sync::Arc::new(egui::FontData::from_owned(bytes)),
-    );
-    if let Some(family) = fonts.families.get_mut(&FontFamily::Proportional) {
-        family.insert(0, "system".to_owned());
+    if let Some(bytes) = system.iter().find_map(|p| std::fs::read(p).ok()) {
+        add(&mut fonts, "system", bytes);
+    }
+    let cjk = cjk_font_candidates(lang);
+    match cjk
+        .iter()
+        .find_map(|p| std::fs::read(p).ok().map(|b| (p, b)))
+    {
+        Some((path, bytes)) => {
+            log::info!("police {} : {path}", lang.code());
+            add(&mut fonts, "cjk", bytes);
+        }
+        None if !cjk.is_empty() => {
+            log::warn!(
+                "aucune police système pour {} : caractères manquants",
+                lang.code()
+            )
+        }
+        None => {}
     }
     ctx.set_fonts(fonts);
+}
+
+/// Polices système (macOS) pour les écritures chinoise, japonaise et coréenne.
+fn cjk_font_candidates(lang: crate::i18n::Lang) -> &'static [&'static str] {
+    use crate::i18n::Lang;
+    match lang {
+        Lang::Ja => &[
+            "/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc",
+            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/PingFang.ttc",
+        ],
+        Lang::Ko => &[
+            "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+            "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+        ],
+        Lang::ZhHans => &[
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+        ],
+        Lang::ZhHant => &[
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        ],
+        _ => &[],
+    }
 }

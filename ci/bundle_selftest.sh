@@ -17,6 +17,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array>
+    <string>en</string><string>fr</string><string>de</string><string>es</string>
+    <string>it</string><string>pt-BR</string><string>ja</string><string>ko</string>
+    <string>zh-Hans</string><string>zh-Hant</string>
+  </array>
 </dict></plist>
 PLIST
 codesign --force --sign - "$APP"

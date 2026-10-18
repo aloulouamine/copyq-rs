@@ -1,5 +1,8 @@
 //! CopyQ-rs : gestionnaire d'historique du presse-papiers inspiré de CopyQ.
 
+#[macro_use]
+mod i18n;
+
 mod app;
 mod clipboard;
 mod crypto;

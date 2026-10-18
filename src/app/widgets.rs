@@ -28,14 +28,14 @@ pub(super) fn empty_state(ui: &mut Ui, history_empty: bool, query: &str, p: &Pal
         let (icon, title, subtitle) = if history_empty {
             (
                 "📋",
-                "Aucun élément pour l'instant".to_string(),
-                "Copiez du texte avec ⌘C, il apparaîtra ici.".to_string(),
+                t!("empty.title").to_string(),
+                t!("empty.subtitle").to_string(),
             )
         } else {
             (
                 "🔍",
-                "Aucun résultat".to_string(),
-                format!("Rien ne correspond à « {query} »."),
+                t!("empty.no_results").to_string(),
+                t!("empty.no_match", query = query),
             )
         };
         ui.label(RichText::new(icon).size(34.0).color(p.text_faint));

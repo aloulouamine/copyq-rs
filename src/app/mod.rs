@@ -12,7 +12,7 @@ use crate::history::{self, History};
 use crate::logging::LockExt;
 use crate::settings::{self, Settings};
 use crate::theme::{self, Palette};
-use crate::{clipboard, hotkey, login_item, paste, platform, tray};
+use crate::{clipboard, hotkey, i18n, login_item, paste, platform, tray};
 use eframe::egui::{self, Align2, Color32, FontId, Frame, Margin, RichText, Sense, Stroke, Ui};
 use row::{build_row, image_hashes, load_thumbnail, row_ui, Row, RowAction};
 use std::collections::HashMap;
@@ -56,17 +56,24 @@ pub struct CopyApp {
     /// Lignes de tous les éléments (par version de l'historique) : la recherche ne
     /// fait plus que filtrer, sans recalculer aperçus ni accès disque à chaque frappe.
     all_rows: Option<(u64, Arc<Vec<Row>>)>,
-    _tray: Option<tray_icon::TrayIcon>,
+    tray: Option<tray::Tray>,
     _hotkey: Option<global_hotkey::GlobalHotKeyManager>,
 }
 
 impl CopyApp {
     pub fn new(cc: &eframe::CreationContext<'_>, history: Arc<Mutex<History>>) -> Self {
-        theme::install(&cc.egui_ctx);
         paste::init();
 
         let settings = Settings::load(&settings::default_path());
         log::info!("réglages : {settings:?}");
+        // Langue : réglage (« auto » = celle de macOS) ; COPYQ_LANG la force (captures CI).
+        let lang = std::env::var("COPYQ_LANG")
+            .ok()
+            .and_then(|code| i18n::Lang::from_code(&code))
+            .unwrap_or_else(|| i18n::resolve(&settings.language));
+        i18n::set(lang);
+        log::info!("langue de l'interface : {}", lang.code());
+        theme::install(&cc.egui_ctx, lang);
         let shared = clipboard::Shared::new(
             settings.save_passwords,
             settings.detect_passwords,
@@ -88,7 +95,7 @@ impl CopyApp {
             Err(e) => {
                 log::warn!("Raccourci ⌘⇧Z indisponible : {e}");
                 toast = Some(Toast {
-                    message: "⌘⇧Z déjà utilisé — CopyQ est-il encore lancé ?".into(),
+                    message: t!("toast.hotkey_taken").into(),
                     at: Instant::now(),
                     duration: Duration::from_secs(8),
                     error: true,
@@ -119,7 +126,7 @@ impl CopyApp {
             toast,
             cache: None,
             all_rows: None,
-            _tray: tray,
+            tray,
             _hotkey: hotkey,
         };
         // Limites choisies (dont durée de conservation).
@@ -178,11 +185,11 @@ impl CopyApp {
             }
         };
         let Some(cb) = self.clipboard.as_mut() else {
-            self.notify_error("Presse-papiers inaccessible");
+            self.notify_error(t!("toast.clipboard_unavailable"));
             return;
         };
         if let Err(e) = clipboard::write_item(cb, &item) {
-            self.notify_error(format!("Échec de la copie : {e}"));
+            self.notify_error(t!("toast.copy_failed", error = e));
             return;
         }
         // Cette écriture vient de nous : la surveillance ne doit pas la réenregistrer.
@@ -197,16 +204,13 @@ impl CopyApp {
             match paste::paste_into_previous() {
                 paste::Outcome::Pasted => {}
                 paste::Outcome::NotTrusted => {
-                    self.notify_error(
-                        "Copié. Pour coller automatiquement, autorisez CopyQ-rs dans \
-                         Réglages Système → Accessibilité",
-                    );
+                    self.notify_error(t!("toast.not_trusted"));
                 }
-                paste::Outcome::NoTarget => self.notify("Copié — faites ⌘V"),
+                paste::Outcome::NoTarget => self.notify(t!("toast.copied_press_v")),
             }
             return;
         }
-        self.notify("Copié dans le presse-papiers");
+        self.notify(t!("toast.copied"));
         if self.settings.hide_after_copy {
             self.query.clear();
             platform::hide_window(ctx);
@@ -268,9 +272,9 @@ impl CopyApp {
             !current
         };
         if now_sensitive {
-            self.notify("Marqué comme mot de passe : chiffré et masqué");
+            self.notify(t!("toast.marked_password"));
         } else {
-            self.notify("Affiché en clair");
+            self.notify(t!("toast.shown_plain"));
         }
     }
 
@@ -287,7 +291,11 @@ impl CopyApp {
                 "supprimé(s)"
             };
             log::info!("{n} mot(s) de passe probable(s) déjà enregistré(s) : {what}");
-            self.notify(format!("{n} mot(s) de passe probable(s) {what}"));
+            self.notify(if self.settings.save_passwords {
+                t!("toast.probable_encrypted", n = n)
+            } else {
+                t!("toast.probable_removed", n = n)
+            });
         }
     }
 
@@ -297,17 +305,31 @@ impl CopyApp {
                 self.login_status = login_item::status();
                 match self.login_status {
                     login_item::Status::RequiresApproval => {
-                        self.notify_error("À valider dans Réglages → Général → Ouverture")
+                        self.notify_error(t!("toast.login_needs_approval"))
                     }
-                    login_item::Status::Enabled => self.notify("Ouverture au démarrage activée"),
-                    _ => self.notify("Ouverture au démarrage désactivée"),
+                    login_item::Status::Enabled => self.notify(t!("toast.login_on")),
+                    _ => self.notify(t!("toast.login_off")),
                 }
             }
             Err(e) => {
                 log::warn!("lancement au démarrage : {e}");
-                self.notify_error(format!("Impossible : {e}"));
+                self.notify_error(t!("toast.login_failed", error = e));
             }
         }
+    }
+
+    /// Change la langue de l'interface (réglage) : textes, polices, menu de l'icône.
+    fn apply_language(&mut self, ctx: &egui::Context) {
+        let lang = i18n::resolve(&self.settings.language);
+        i18n::set(lang);
+        log::info!("langue de l'interface : {}", lang.code());
+        theme::install_fonts(ctx, lang);
+        if let Some(tray) = &self.tray {
+            tray.relabel();
+        }
+        // Lignes en cache : libellés (« Image », « 2 fichiers »…) à recalculer.
+        self.all_rows = None;
+        self.cache = None;
     }
 
     fn notify(&mut self, msg: impl Into<String>) {
@@ -455,7 +477,7 @@ impl CopyApp {
                 ui.painter().text(
                     strip.center(),
                     Align2::CENTER_CENTER,
-                    "Presse-papiers",
+                    t!("app.title"),
                     FontId::proportional(12.5),
                     p.text_faint,
                 );
@@ -493,7 +515,7 @@ impl CopyApp {
                 .margin(Margin::symmetric(4, 2))
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
-                .hint_text(RichText::new("Rechercher dans l'historique…").color(p.text_faint))
+                .hint_text(RichText::new(t!("search.hint")).color(p.text_faint))
                 .desired_width(ui.available_width() - 64.0),
         );
         if edit.changed() {
@@ -525,8 +547,8 @@ impl CopyApp {
                     .hline(r.x_range(), r.top(), Stroke::new(1.0_f32, p.border));
                 ui.horizontal(|ui| {
                     let mut paused = self.shared.paused.load(Ordering::Relaxed);
-                    if toggle(ui, &mut paused, "Pause", p)
-                        .on_hover_text("Ne plus enregistrer les nouvelles copies (mots de passe…)")
+                    if toggle(ui, &mut paused, t!("footer.pause"), p)
+                        .on_hover_text(t!("footer.pause_tip"))
                         .changed()
                     {
                         self.shared.paused.store(paused, Ordering::Relaxed);
@@ -543,20 +565,21 @@ impl CopyApp {
     /// « Tout effacer » (avec confirmation) et bouton du panneau « Réglages ».
     fn footer_buttons(&mut self, ui: &mut Ui, p: &Palette, total: usize) {
         if self.confirm_clear {
-            if ghost_button(ui, "Annuler", p.text_muted, p).clicked() {
+            if ghost_button(ui, t!("footer.cancel"), p.text_muted, p).clicked() {
                 self.confirm_clear = false;
             }
-            let confirm = egui::Button::new(RichText::new("Tout supprimer").color(Color32::WHITE))
-                .fill(p.danger)
-                .corner_radius(7.0);
+            let confirm =
+                egui::Button::new(RichText::new(t!("footer.delete_all")).color(Color32::WHITE))
+                    .fill(p.danger)
+                    .corner_radius(7.0);
             if ui.add(confirm).clicked() {
                 self.clear_all();
                 self.confirm_clear = false;
             }
-        } else if total > 0 && ghost_button(ui, "Tout effacer", p.danger, p).clicked() {
+        } else if total > 0 && ghost_button(ui, t!("footer.clear"), p.danger, p).clicked() {
             self.confirm_clear = true;
         }
-        let button = ghost_button(ui, "Réglages", p.text_muted, p);
+        let button = ghost_button(ui, t!("footer.settings"), p.text_muted, p);
         egui::Popup::from_toggle_button_response(&button)
             .id(egui::Id::unique(SETTINGS_POPUP))
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
@@ -568,16 +591,16 @@ impl CopyApp {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             let enter = if self.settings.auto_paste {
-                "coller"
+                t!("keys.paste")
             } else {
-                "copier"
+                t!("keys.copy")
             };
             for (key, label) in [
-                ("⌘⇧Z", "ouvrir"),
-                ("↑↓", "naviguer"),
-                ("entrée", enter),
-                ("⌘⌫", "supprimer"),
-                ("esc", "fermer"),
+                ("⌘⇧Z", t!("keys.open")),
+                ("↑↓", t!("keys.navigate")),
+                (t!("keys.enter"), enter),
+                ("⌘⌫", t!("keys.delete")),
+                ("esc", t!("keys.close")),
             ] {
                 kbd(ui, key, p);
                 ui.label(RichText::new(label).size(11.5).color(p.text_faint));

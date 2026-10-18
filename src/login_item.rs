@@ -59,7 +59,7 @@ mod imp {
 
     pub fn set_enabled(enabled: bool) -> Result<(), String> {
         autoreleasepool(|_| {
-            let svc = service().ok_or("lancement au démarrage indisponible sur ce macOS")?;
+            let svc = service().ok_or(t!("error.login_unavailable"))?;
             // SAFETY : (dés)inscription de l'app elle-même ; l'erreur éventuelle est
             // renvoyée sous forme de `NSError`.
             let result = unsafe {
@@ -81,7 +81,7 @@ mod imp {
         Status::Unavailable
     }
     pub fn set_enabled(_: bool) -> Result<(), String> {
-        Err("non pris en charge sur ce système".into())
+        Err(t!("error.not_supported").into())
     }
     pub fn is_bundled() -> bool {
         false
