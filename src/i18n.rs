@@ -193,17 +193,29 @@ type Table = HashMap<&'static str, &'static str>;
 
 fn tables() -> &'static [Table] {
     static TABLES: OnceLock<Vec<Table>> = OnceLock::new();
-    TABLES.get_or_init(|| ALL.iter().map(|l| parse(l.source())).collect())
+    TABLES.get_or_init(|| ALL.iter().map(|l| parse(*l)).collect())
 }
 
+/// Marque de droite à gauche (U+200F, invisible).
+const RLM: char = '\u{200F}';
+
 /// Lit un fichier de langue ; les textes vivent jusqu'à la fin du programme.
-fn parse(source: &'static str) -> Table {
-    let map: HashMap<String, String> = serde_json::from_str(source).unwrap_or_else(|e| {
+///
+/// Écriture de droite à gauche : chaque texte est encadré de marques RLM. egui met en
+/// forme l'arabe mais compose la ligne de gauche à droite ; sans ces marques, la
+/// ponctuation de début ou de fin (« . », « ⚠ », « (⌘⇧Z) ») se retrouve du mauvais côté.
+fn parse(lang: Lang) -> Table {
+    let map: HashMap<String, String> = serde_json::from_str(lang.source()).unwrap_or_else(|e| {
         log::error!("fichier de langue invalide : {e}");
         HashMap::new()
     });
     map.into_iter()
         .map(|(k, v)| {
+            let v = if lang.is_rtl() && !k.starts_with("num.") {
+                format!("{RLM}{v}{RLM}")
+            } else {
+                v
+            };
             let k: &'static str = Box::leak(k.into_boxed_str());
             let v: &'static str = Box::leak(v.into_boxed_str());
             (k, v)
@@ -375,5 +387,10 @@ mod tests {
             "コピーできませんでした:x"
         );
         assert_eq!(tr_in(Lang::De, "clé.inexistante"), "clé.inexistante");
+        // Arabe : textes encadrés de marques de droite à gauche, sauf les séparateurs.
+        let ar = tr_in(Lang::Ar, "limits.oldest_deleted");
+        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
+        assert_eq!(tr_in(Lang::Ar, "num.decimal"), ".");
+        assert!(!tr_in(Lang::Fr, "limits.apply").contains(RLM));
     }
 }
