@@ -185,13 +185,12 @@ mod tests {
 
     #[test]
     fn diagnostic_bidi() {
+        let mut out = String::new();
         for text in ["مسح الكل", "\u{200F}مسح الكل.\u{200F}", "abc def"] {
             let Some(xs) = glyph_xs(text) else { return };
-            let first = xs
-                .iter()
-                .find(|(c, _)| *c == text.trim_start_matches('\u{200F}').chars().next().unwrap());
-            let last_word = xs.iter().find(|(c, _)| *c == 'ا' || *c == 'd');
-            panic!("{text:?} → {xs:?} ; premier={first:?} dernier mot={last_word:?}");
+            let xs: Vec<String> = xs.iter().map(|(c, x)| format!("{c}@{x:.0}")).collect();
+            out += &format!("\n{text:?} => {}", xs.join(" "));
         }
+        panic!("DIAG{out}");
     }
 }
