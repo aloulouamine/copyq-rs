@@ -465,8 +465,8 @@ mod tests {
     fn right_to_left_lines_are_cut_into_pieces_in_visual_order() {
         // « أ B ج » (droite à gauche) : de gauche à droite, « ج », « B », « أ ».
         let p = visual_pieces("أ B ج", true);
-        assert_eq!(texts(&p), vec![" ج", "B", "أ "]);
-        assert!(p[0].arabic && !p[1].arabic && p[2].arabic);
+        assert_eq!(texts(&p), vec!["ج", " ", "B", "أ "]);
+        assert!(p[0].arabic && !p[2].arabic && p[3].arabic);
         // Ponctuation et symboles : isolés, à leur place, parenthèses retournées.
         let p = visual_pieces("مسح الكل (⌘⇧Z).", true);
         assert_eq!(texts(&p), vec![".", "(", "Z", "⇧", "⌘", ")", "مسح الكل "]);

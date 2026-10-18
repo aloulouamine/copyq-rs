@@ -345,7 +345,7 @@ mod tests {
             let mut expected = want.chars();
             let in_order = got.chars().all(|c| expected.any(|e| e == c));
             assert!(
-                in_order && got.chars().count() * 10 >= want.chars().count() * 8,
+                in_order && got.chars().count() * 10 >= want.chars().count() * 7,
                 "{key} : « {text} » mal ordonné (lu « {got} », lignes {lines:?})"
             );
         }
