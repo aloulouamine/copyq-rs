@@ -120,10 +120,10 @@ pub fn describe(width: u32, height: u32, file_size: u64) -> String {
 /// Comprend aussi l'ancien format, en français (« 245 Ko », « 3,4 Mo »).
 pub fn display_meta(meta: &str) -> String {
     let Some((dims, size)) = meta.split_once(" · ") else {
-        return meta.to_string();
+        return crate::i18n::ltr_isolate(meta);
     };
     match parse_size(size) {
-        Some(bytes) => format!("{dims} · {}", human_size(bytes)),
+        Some(bytes) => format!("{} · {}", crate::i18n::ltr_isolate(dims), human_size(bytes)),
         None => meta.to_string(),
     }
 }
@@ -426,13 +426,17 @@ mod tests {
 
     #[test]
     fn stored_description_is_language_neutral_and_old_ones_still_display() {
+        let plain = |s: String| s.replace(['\u{2066}', '\u{2069}'], "");
         let meta = describe(1280, 720, 245_000);
         assert_eq!(meta, "1280 × 720 · 245000");
-        assert_eq!(display_meta(&meta), "1280 × 720 · 245 Ko");
-        assert_eq!(display_meta("1280 × 720 · 3,4 Mo"), "1280 × 720 · 3,4 Mo");
-        assert_eq!(display_meta("8 × 4 · 512 o"), "8 × 4 · 512 o");
+        assert_eq!(plain(display_meta(&meta)), "1280 × 720 · 245 Ko");
         assert_eq!(
-            display_meta("1280 × 720"),
+            plain(display_meta("1280 × 720 · 3,4 Mo")),
+            "1280 × 720 · 3,4 Mo"
+        );
+        assert_eq!(plain(display_meta("8 × 4 · 512 o")), "8 × 4 · 512 o");
+        assert_eq!(
+            plain(display_meta("1280 × 720")),
             "1280 × 720",
             "taille pas encore connue"
         );
