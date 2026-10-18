@@ -9,7 +9,7 @@ use crate::logging::LockExt;
 use crate::settings;
 use crate::theme::Palette;
 use crate::{i18n, login_item, paste, storage};
-use eframe::egui::{self, Color32, RichText, Stroke, Ui};
+use eframe::egui::{self, Color32, Stroke, Ui};
 use std::sync::atomic::Ordering;
 
 impl CopyApp {

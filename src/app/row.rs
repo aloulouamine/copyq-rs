@@ -6,7 +6,7 @@ use crate::logging::LockExt;
 use crate::media::{self, Variant};
 use crate::theme::Palette;
 use crate::{icons, keychain};
-use eframe::egui::{self, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, Ui};
+use eframe::egui::{self, Align2, Color32, FontId, Rect, Sense, Stroke, StrokeKind, Ui};
 use std::collections::HashSet;
 use std::sync::{Mutex, Once};
 use unicode_normalization::UnicodeNormalization;
