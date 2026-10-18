@@ -1,0 +1,136 @@
+﻿clé,contexte,anglais,français,arabe (proposition),arabe (relu),remarques du relecteur,à vérifier
+app.title,Titre en haut de la fenêtre,Clipboard,Presse-papiers,الحافظة,,,
+search.hint,Texte gris dans le champ de recherche vide,Search history…,Rechercher dans l'historique…,ابحث في السجل…,,,
+footer.pause,Bouton ou interrupteur du bas de la fenêtre,Pause,Pause,إيقاف مؤقت,,,
+footer.pause_tip,Bouton ou interrupteur du bas de la fenêtre,Stop saving new copies (passwords…),Ne plus enregistrer les nouvelles copies (mots de passe…),التوقف عن حفظ النسخ الجديدة (كلمات السر…),,,
+footer.cancel,Bouton ou interrupteur du bas de la fenêtre,Cancel,Annuler,إلغاء,,,
+footer.delete_all,Bouton ou interrupteur du bas de la fenêtre,Delete everything,Tout supprimer,حذف الكل,,,
+footer.clear,Bouton ou interrupteur du bas de la fenêtre,Clear all,Tout effacer,مسح الكل,,,
+footer.settings,Bouton ou interrupteur du bas de la fenêtre,Settings,Réglages,الإعدادات,,,
+keys.open,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",open,ouvrir,فتح,,,
+keys.navigate,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",navigate,naviguer,تنقّل,,,
+keys.enter,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",return,entrée,رجوع,,,Nom de la touche Retour sur un clavier Mac arabe
+keys.paste,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",paste,coller,لصق,,,
+keys.copy,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",copy,copier,نسخ,,,
+keys.delete,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",delete,supprimer,حذف,,,
+keys.close,"Légende des raccourcis clavier en bas (un ou deux mots, très court)",close,fermer,إغلاق,,,
+toast.hotkey_taken,Message bref affiché 2 à 5 s en bas de la fenêtre,⌘⇧Z already in use — is CopyQ still running?,⌘⇧Z déjà utilisé — CopyQ est-il encore lancé ?,الاختصار ⌘⇧Z مستخدم بالفعل — هل ما زال CopyQ يعمل؟,,,
+toast.clipboard_unavailable,Message bref affiché 2 à 5 s en bas de la fenêtre,Clipboard unavailable,Presse-papiers inaccessible,تعذّر الوصول إلى الحافظة,,,
+toast.copy_failed,Message bref affiché 2 à 5 s en bas de la fenêtre,Copy failed: {error},Échec de la copie : {error},تعذّر النسخ: {error},,,
+toast.not_trusted,Message bref affiché 2 à 5 s en bas de la fenêtre,"Copied. To paste automatically, allow CopyQ-rs in System Settings → Accessibility","Copié. Pour coller automatiquement, autorisez CopyQ-rs dans Réglages Système → Accessibilité",تم النسخ. للّصق تلقائيًا، اسمح لـ CopyQ-rs في إعدادات النظام ← تسهيلات الاستخدام,,,Reprendre les noms exacts des menus de macOS en arabe
+toast.copied_press_v,Message bref affiché 2 à 5 s en bas de la fenêtre,Copied — press ⌘V,Copié — faites ⌘V,تم النسخ — اضغط ⌘V,,,
+toast.copied,Message bref affiché 2 à 5 s en bas de la fenêtre,Copied to clipboard,Copié dans le presse-papiers,تم النسخ إلى الحافظة,,,
+toast.marked_password,Message bref affiché 2 à 5 s en bas de la fenêtre,Marked as password: encrypted and hidden,Marqué comme mot de passe : chiffré et masqué,تم التعليم ككلمة سر: مشفّرة ومخفية,,,
+toast.shown_plain,Message bref affiché 2 à 5 s en bas de la fenêtre,Shown in plain text,Affiché en clair,معروضة كنص عادي,,,
+toast.probable_encrypted,Message bref affiché 2 à 5 s en bas de la fenêtre,{n} probable password(s) encrypted and hidden,{n} mot(s) de passe probable(s) chiffré(s) et masqué(s),تم تشفير وإخفاء {n} من كلمات السر المحتملة,,,
+toast.probable_removed,Message bref affiché 2 à 5 s en bas de la fenêtre,{n} probable password(s) removed,{n} mot(s) de passe probable(s) supprimé(s),تم حذف {n} من كلمات السر المحتملة,,,
+toast.login_needs_approval,Message bref affiché 2 à 5 s en bas de la fenêtre,Approve in System Settings → General → Login Items,À valider dans Réglages → Général → Ouverture,وافق عليه في إعدادات النظام ← عام ← عناصر تسجيل الدخول,,,Reprendre les noms exacts des menus de macOS en arabe
+toast.login_on,Message bref affiché 2 à 5 s en bas de la fenêtre,Open at login enabled,Ouverture au démarrage activée,تم تشغيل الفتح عند تسجيل الدخول,,,
+toast.login_off,Message bref affiché 2 à 5 s en bas de la fenêtre,Open at login disabled,Ouverture au démarrage désactivée,تم إيقاف الفتح عند تسجيل الدخول,,,
+toast.login_failed,Message bref affiché 2 à 5 s en bas de la fenêtre,Not possible: {error},Impossible : {error},غير ممكن: {error},,,
+toast.limits_applied,Message bref affiché 2 à 5 s en bas de la fenêtre,Limits applied,Limites appliquées,تم تطبيق الحدود,,,
+toast.limits_applied_removed,Message bref affiché 2 à 5 s en bas de la fenêtre,Limits applied: {n} item(s) removed,Limites appliquées : {n} élément(s) supprimé(s),تم تطبيق الحدود: حُذف {n} عنصر,,,{n} quelconque : accord du nom à vérifier
+toast.passwords_erased,Message bref affiché 2 à 5 s en bas de la fenêtre,{n} password(s) erased,{n} mot(s) de passe effacé(s),تم مسح {n} من كلمات السر,,,
+row.delete,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Delete,Supprimer,حذف,,,
+row.unmark_password,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Not a password: show in plain text (⌘L),Ce n'est pas un mot de passe : afficher en clair (⌘L),ليست كلمة سر: اعرضها كنص عادي (⌘L),,,
+row.mark_password,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",This is a password: encrypt and hide (⌘L),C'est un mot de passe : chiffrer et masquer (⌘L),هذه كلمة سر: شفّرها وأخفِها (⌘L),,,
+row.hidden_password_tip,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Hidden password — click or ↵ to copy it,Mot de passe masqué — cliquez ou ↵ pour le copier,كلمة سر مخفية — انقر أو اضغط ↵ لنسخها,,,
+row.image,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Image,Image,صورة,,,
+row.file,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",File,Fichier,ملف,,,
+row.files_more,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{name} + {n} more,{name} + {n} autre(s),{name} و{n} غيره,,,{name} = nom de fichier (souvent en caractères latins)
+row.missing,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",not found,introuvable,غير موجود,,,
+row.files_count,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{n} files,{n} fichiers,{n} ملفات,,,{n} ≥ 2 : accord du nom à vérifier (ملفان / ملفات / ملفًا)
+row.password,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",password,mot de passe,كلمة سر,,,
+row.lines,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{n} lines,{n} lignes,{n} أسطر,,,{n} ≥ 2 : accord du nom à vérifier (سطران / أسطر / سطرًا)
+row.chars,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{n} chars,{n} car.,{n} حرف,,,
+row.kchars,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{n}k chars,{n} k car.,{n} ألف حرف,,,"{n} est un nombre décimal, ex. « 2.5 » → « 2.5 ألف حرف »"
+time.now,"Ancienneté d'un élément, sous son titre (très court : « il y a 5 min »)",just now,à l'instant,الآن,,,
+time.minutes,"Ancienneté d'un élément, sous son titre (très court : « il y a 5 min »)",{n} min ago,il y a {n} min,منذ {n} د,,,
+time.hours,"Ancienneté d'un élément, sous son titre (très court : « il y a 5 min »)",{n} h ago,il y a {n} h,منذ {n} س,,,
+time.days,"Ancienneté d'un élément, sous son titre (très court : « il y a 5 min »)",{n} d ago,il y a {n} j,منذ {n} يوم,,,
+num.decimal,Séparateur décimal — NE PAS TRADUIRE sans avis (« . » ou « ٫ »),.,",",.,,,Garder « . » si les chiffres occidentaux sont utilisés
+size.bytes,"Taille de fichier (octets, kilo-octets, méga-octets), abréviation courte",{n} B,{n} o,{n} بايت,,,
+size.kb,"Taille de fichier (octets, kilo-octets, méga-octets), abréviation courte",{n} KB,{n} Ko,{n} ك.ب,,,
+size.mb,"Taille de fichier (octets, kilo-octets, méga-octets), abréviation courte",{n} MB,{n} Mo,{n} م.ب,,,
+empty.title,Message au centre de la fenêtre quand la liste est vide,Nothing here yet,Aucun élément pour l'instant,لا يوجد شيء بعد,,,
+empty.subtitle,Message au centre de la fenêtre quand la liste est vide,Copy some text with ⌘C and it will show up here.,"Copiez du texte avec ⌘C, il apparaîtra ici.",انسخ نصًا باستخدام ⌘C وسيظهر هنا.,,,
+empty.no_results,Message au centre de la fenêtre quand la liste est vide,No results,Aucun résultat,لا توجد نتائج,,,
+empty.no_match,Message au centre de la fenêtre quand la liste est vide,Nothing matches “{query}”.,Rien ne correspond à « {query} ».,لا شيء يطابق «{query}».,,,
+settings.title,"Panneau Réglages : titre, onglets, choix de la langue",Settings,Réglages,الإعدادات,,,
+settings.tab_general,"Panneau Réglages : titre, onglets, choix de la langue",General,Général,عام,,,
+settings.tab_limits,"Panneau Réglages : titre, onglets, choix de la langue",Limits,Limites,الحدود,,,
+settings.language,"Panneau Réglages : titre, onglets, choix de la langue",Language,Langue,اللغة,,,
+settings.language_auto,"Panneau Réglages : titre, onglets, choix de la langue",System ({name}),Système ({name}),النظام ({name}),,,
+limits.items,"Onglet « Limites » des réglages : libellé, champ ou explication",Number of items,Nombre d'éléments,عدد العناصر,,,
+limits.oldest_deleted,"Onglet « Limites » des réglages : libellé, champ ou explication","Beyond this, the oldest are deleted.","Au-delà, les plus anciens sont supprimés.",عند تجاوزه، يُحذف الأقدم.,,,
+limits.images,"Onglet « Limites » des réglages : libellé, champ ou explication",Number of images,Nombre d'images,عدد الصور,,,
+limits.images_help,"Onglet « Limites » des réglages : libellé, champ ou explication",Counted in the total; 0 = no images kept.,Comptées dans le total ; 0 = aucune image gardée.,تُحسب ضمن الإجمالي؛ 0 = لا تُحفظ أي صورة.,,,
+limits.text_size,"Onglet « Limites » des réglages : libellé, champ ou explication",Size of a text,Taille d'un texte,حجم النص الواحد,,,
+limits.text_size_help,"Onglet « Limites » des réglages : libellé, champ ou explication",Longer text is ignored.,Un texte plus long est ignoré.,يُتجاهل النص الأطول.,,,
+limits.total_size,"Onglet « Limites » des réglages : libellé, champ ou explication",Total size of texts,Taille totale des textes,الحجم الإجمالي للنصوص,,,
+limits.image_size,"Onglet « Limites » des réglages : libellé, champ ou explication",Size of an image,Taille d'une image,حجم الصورة الواحدة,,,
+limits.image_size_help,"Onglet « Limites » des réglages : libellé, champ ou explication",A larger image is ignored.,Une image plus grande est ignorée.,تُتجاهل الصورة الأكبر.,,,
+limits.retention,"Onglet « Limites » des réglages : libellé, champ ou explication",Retention,Conservation,مدة الاحتفاظ,,,
+limits.retention_help,"Onglet « Limites » des réglages : libellé, champ ou explication",Older items are erased automatically.,Les éléments plus anciens sont effacés automatiquement.,تُمسح العناصر الأقدم تلقائيًا.,,,
+limits.unit_kb,"Onglet « Limites » des réglages : libellé, champ ou explication", KB, Ko, ك.ب,,,Abréviation précédée d'une espace
+limits.unit_mb,"Onglet « Limites » des réglages : libellé, champ ou explication", MB, Mo, م.ب,,,Abréviation précédée d'une espace
+limits.unit_mpx,"Onglet « Limites » des réglages : libellé, champ ou explication", MP, Mpx, ميغابكسل,,,"Mégapixels, abréviation (précédée d'une espace)"
+retention.unlimited,Choix de durée de conservation (menu déroulant),Unlimited,Illimitée,غير محدودة,,,
+retention.day,Choix de durée de conservation (menu déroulant),1 day,1 jour,يوم واحد,,,
+retention.days,Choix de durée de conservation (menu déroulant),{n} days,{n} jours,{n} يومًا,,,"{n} vaut 7, 30 ou 90 : accord du nom à vérifier (أيام / يومًا)"
+retention.year,Choix de durée de conservation (menu déroulant),1 year,1 an,سنة واحدة,,,
+limits.defaults,"Onglet « Limites » des réglages : libellé, champ ou explication",Defaults,Valeurs par défaut,القيم الافتراضية,,,
+limits.apply,"Onglet « Limites » des réglages : libellé, champ ou explication",Apply,Appliquer,تطبيق,,,
+limits.will_remove,"Onglet « Limites » des réglages : libellé, champ ou explication",⚠ {n} item(s) will be permanently deleted.,⚠ {n} élément(s) seront supprimés définitivement.,⚠ سيُحذف {n} عنصر نهائيًا.,,,{n} quelconque : accord du nom à vérifier
+general.auto_paste,Onglet « Général » des réglages : interrupteur ou explication,Paste automatically,Coller automatiquement,اللصق تلقائيًا,,,
+general.auto_paste_help,Onglet « Général » des réglages : interrupteur ou explication,The chosen item is pasted straight into the app you opened the history from (⌘⇧Z).,L'élément choisi est collé directement dans l'application d'où vous avez ouvert l'historique (⌘⇧Z).,يُلصق العنصر المختار مباشرةً في التطبيق الذي فتحت منه السجل (⌘⇧Z).,,,
+general.accessibility_needed,Onglet « Général » des réglages : interrupteur ou explication,⚠ “Accessibility” permission required.,⚠ Autorisation « Accessibilité » requise.,⚠ يلزم إذن «تسهيلات الاستخدام».,,,
+general.open_settings,Onglet « Général » des réglages : interrupteur ou explication,Open settings,Ouvrir les réglages,فتح الإعدادات,,,
+general.hide_after_copy,Onglet « Général » des réglages : interrupteur ou explication,Hide after copying,Masquer après copie,الإخفاء بعد النسخ,,,
+general.hide_after_copy_help,Onglet « Général » des réglages : interrupteur ou explication,The window closes as soon as an item is chosen; then press ⌘V.,La fenêtre se ferme dès qu'un élément est choisi : il reste à faire ⌘V.,تُغلق النافذة بمجرد اختيار عنصر، ثم اضغط ⌘V.,,,
+general.save_images,Onglet « Général » des réglages : interrupteur ou explication,Save images,Enregistrer les images,حفظ الصور,,,
+general.save_images_help,Onglet « Général » des réglages : interrupteur ou explication,"Screenshots and copied images, encrypted on disk with the keychain key (number set in Limits). Files copied in the Finder (videos, sounds, PDFs…) are always kept, by their location.","Captures d'écran et images copiées, chiffrées sur le disque avec la clé du trousseau (nombre réglable dans Limites). Les fichiers copiés dans le Finder (vidéos, sons, PDF…) sont toujours gardés, par leur emplacement.",لقطات الشاشة والصور المنسوخة، مشفّرة على القرص بمفتاح سلسلة المفاتيح (يُضبط العدد في «الحدود»). الملفات المنسوخة في فايندر (فيديو، صوت، PDF…) تُحفظ دائمًا بموقعها.,,,« Finder » : nom du Finder dans macOS en arabe
+general.open_at_login,Onglet « Général » des réglages : interrupteur ou explication,Open at login,Ouvrir au démarrage,الفتح عند تسجيل الدخول,,,
+general.open_at_login_help,Onglet « Général » des réglages : interrupteur ou explication,Launches CopyQ-rs when you log in.,Lance CopyQ-rs à l'ouverture de votre session.,يشغّل CopyQ-rs عند تسجيل دخولك.,,,
+general.open_at_login_unavailable,Onglet « Général » des réglages : interrupteur ou explication,Available once the app is installed as an application (.app).,Disponible une fois l'app installée en tant qu'application (.app).,متاح بعد تثبيت التطبيق كتطبيق (.app).,,,
+general.save_passwords,Onglet « Général » des réglages : interrupteur ou explication,Save passwords,Enregistrer les mots de passe,حفظ كلمات السر,,,
+general.save_passwords_help,Onglet « Général » des réglages : interrupteur ou explication,"Copies marked confidential by 1Password, Bitwarden, the keychain… Encrypted on disk with a key kept in the macOS keychain, shown hidden and excluded from search.","Copies marquées confidentielles par 1Password, Bitwarden, le trousseau… Chiffrées sur le disque avec une clé gardée dans le trousseau macOS, affichées masquées et exclues de la recherche.",النسخ التي يعلّمها 1Password وBitwarden وسلسلة المفاتيح… كسرية. تُشفَّر على القرص بمفتاح محفوظ في سلسلة مفاتيح macOS، وتُعرض مخفية، ولا تظهر في البحث.,,,
+general.detect_passwords,Onglet « Général » des réglages : interrupteur ou explication,Detect passwords,Détecter les mots de passe,اكتشاف كلمات السر,,,
+general.detect_passwords_help,Onglet « Général » des réglages : interrupteur ou explication,"For browser extensions (Dashlane, 1Password, Bitwarden…) that don't flag their copies: a text with no spaces, 8 to 128 characters, mixing upper case, lower case and digits. ⌘L fixes a mistake on an item.","Pour les extensions de navigateur (Dashlane, 1Password, Bitwarden…) qui ne signalent pas leurs copies : un texte sans espace de 8 à 128 caractères mêlant majuscules, minuscules et chiffres. ⌘L corrige une erreur sur un élément.",لإضافات المتصفح (Dashlane و1Password وBitwarden…) التي لا تعلّم ما تنسخه: نص بلا مسافات من 8 إلى 128 حرفًا يجمع بين الأحرف الكبيرة والصغيرة والأرقام. يصحّح ⌘L الخطأ في أي عنصر.,,,
+general.keychain_error,Onglet « Général » des réglages : interrupteur ou explication,"⚠ Keychain unavailable ({error}): passwords stay in memory without being saved, and images are not kept.","⚠ Trousseau inaccessible ({error}) : les mots de passe restent en mémoire sans être enregistrés, et les images ne sont pas gardées.",⚠ تعذّر الوصول إلى سلسلة المفاتيح ({error}): تبقى كلمات السر في الذاكرة دون حفظ، ولا تُحفظ الصور.,,,
+general.erase_password,Onglet « Général » des réglages : interrupteur ou explication,Erase the saved password,Effacer le mot de passe enregistré,مسح كلمة السر المحفوظة,,,
+general.erase_passwords,Onglet « Général » des réglages : interrupteur ou explication,Erase the {n} saved passwords,Effacer les {n} mots de passe enregistrés,مسح كلمات السر المحفوظة ({n}),,,
+tray.show,Menu de l'icône dans la barre des menus macOS,Show history,Afficher l'historique,عرض السجل,,,
+tray.quit,Menu de l'icône dans la barre des menus macOS,Quit,Quitter,إنهاء,,,
+error.files_missing,Message d'erreur affiché après « Échec de la copie : … »,file(s) not found — moved or deleted?,fichier(s) introuvable(s) — déplacé(s) ou supprimé(s) ?,الملفات غير موجودة — هل نُقلت أو حُذفت؟,,,
+error.files_write,Message d'erreur affiché après « Échec de la copie : … »,could not put the files on the clipboard,écriture des fichiers dans le presse-papiers impossible,تعذّر وضع الملفات في الحافظة,,,
+error.image_unreadable,Message d'erreur affiché après « Échec de la copie : … »,image missing or unreadable,image introuvable ou illisible,الصورة مفقودة أو غير قابلة للقراءة,,,
+error.keychain,Message d'erreur affiché après « Échec de la copie : … »,keychain unavailable,trousseau inaccessible,تعذّر الوصول إلى سلسلة المفاتيح,,,
+error.login_unavailable,Message d'erreur affiché après « Échec de la copie : … »,open at login is unavailable on this version of macOS,lancement au démarrage indisponible sur ce macOS,الفتح عند تسجيل الدخول غير متاح في هذا الإصدار من macOS,,,
+error.not_supported,Message d'erreur affiché après « Échec de la copie : … »,not supported on this system,non pris en charge sur ce système,غير مدعوم على هذا النظام,,,
+store.name,Nom dans l'App Store (30 caractères max) — le nom définitif reste à choisir (« CopyQ » est une marque),Clipboard history,Historique du presse-papiers,سجل الحافظة,,,
+store.subtitle,Sous-titre App Store (30 caractères max),"Copy, find, paste again","Copier, retrouver, recoller",انسخ وابحث والصق من جديد,,,
+store.promo,Texte promotionnel (170 caractères max),"Everything you copy, one shortcut away: ⌘⇧Z. Passwords and screenshots stay encrypted on your Mac.","Tout ce que vous copiez, à un raccourci : ⌘⇧Z. Mots de passe et captures restent chiffrés sur votre Mac.",كل ما تنسخه على بُعد اختصار واحد: ⌘⇧Z. تبقى كلمات السر ولقطات الشاشة مشفّرة على جهاز Mac.,,,
+store.description,Description (4 000 caractères max),"Clipboard history for macOS. Press ⌘⇧Z to see everything you copied — text, links, images, files — search it and paste any item straight into the app you were using.
+
+• Instant search, accents ignored
+• Images and screenshots with previews
+• Passwords detected, encrypted with your Keychain key and hidden
+• Screenshots encrypted on disk
+• Adjustable limits and retention
+• 11 languages","Historique du presse-papiers pour macOS. ⌘⇧Z affiche tout ce que vous avez copié — textes, liens, images, fichiers —, permet d'y chercher et recolle l'élément choisi directement dans l'app où vous étiez.
+
+• Recherche instantanée, sans tenir compte des accents
+• Images et captures avec aperçu
+• Mots de passe détectés, chiffrés avec la clé du trousseau et masqués
+• Captures d'écran chiffrées sur le disque
+• Limites et durée de conservation réglables
+• 11 langues","سجل الحافظة لنظام macOS. اضغط ⌘⇧Z لترى كل ما نسخته — نصوص وروابط وصور وملفات — وابحث فيه والصق أي عنصر مباشرةً في التطبيق الذي كنت تستخدمه.
+
+• بحث فوري
+• صور ولقطات شاشة مع معاينة
+• اكتشاف كلمات السر وتشفيرها بمفتاح سلسلة المفاتيح وإخفاؤها
+• تشفير لقطات الشاشة على القرص
+• حدود ومدة احتفاظ قابلة للضبط
+• 11 لغة",,,
+store.keywords,"Mots-clés (100 caractères max, séparés par des virgules)","clipboard,history,copy,paste,manager,snippets,productivity","presse-papiers,historique,copier,coller,gestionnaire,productivité","حافظة,سجل,نسخ,لصق,مدير,إنتاجية,اختصارات",,,

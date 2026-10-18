@@ -351,7 +351,7 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
         title: if it.sensitive {
             "••••••••••••".to_string()
         } else {
-            history::preview(&it.text, PREVIEW_CHARS)
+            crate::i18n::display_dir(&history::preview(&it.text, PREVIEW_CHARS)).into_owned()
         },
         kind: if it.sensitive {
             Kind::Secret

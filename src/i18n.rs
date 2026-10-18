@@ -250,6 +250,21 @@ pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
     fill(tr(key), args)
 }
 
+/// Texte de l'utilisateur prêt à afficher : s'il commence par de l'arabe (ou de
+/// l'hébreu…), il est encadré de marques RLM pour que egui le compose de droite à
+/// gauche, ponctuation et chiffres compris. Sinon, inchangé.
+pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
+    let first_strong = text.chars().find(|c| c.is_alphabetic());
+    let rtl = first_strong.is_some_and(|c| {
+        matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
+    });
+    if rtl {
+        format!("{RLM}{text}{RLM}").into()
+    } else {
+        text.into()
+    }
+}
+
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).
 pub fn decimal(x: f64) -> String {
     format!("{x:.1}").replace('.', tr("num.decimal"))
@@ -357,6 +372,15 @@ mod tests {
             }
         }
         assert!(used > 50, "{used} clés utilisées");
+    }
+
+    #[test]
+    fn user_text_starting_in_arabic_is_shown_right_to_left() {
+        assert_eq!(display_dir("Order 12"), "Order 12");
+        assert_eq!(display_dir("12 — Order"), "12 — Order");
+        let ar = display_dir("رقم الطلب 12345 — Order ID");
+        assert!(ar.starts_with(RLM) && ar.ends_with(RLM));
+        assert_eq!(display_dir(""), "");
     }
 
     #[test]
