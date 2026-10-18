@@ -159,6 +159,18 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
     if let Some(bytes) = system.iter().find_map(|p| std::fs::read(p).ok()) {
         add(&mut fonts, "system", bytes);
     }
+    // ESSAI : police arabe en secours, pour mesurer le rendu actuel d'egui.
+    if let Some(bytes) = [
+        "/System/Library/Fonts/SFArabic.ttf",
+        "/System/Library/Fonts/GeezaPro.ttc",
+        "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
+    ]
+    .iter()
+    .find_map(|p| std::fs::read(p).ok())
+    {
+        log::info!("ESSAI police arabe chargée");
+        add(&mut fonts, "arabic", bytes);
+    }
     let cjk = cjk_font_candidates(lang);
     match cjk
         .iter()

@@ -82,6 +82,12 @@ jobs:
           sleep 5
           osascript -e 'set the clipboard to (read (POSIX file "/tmp/capture.png") as «class PNGf»)'
           sleep 2
+          # ESSAI arabe : texte seul, texte mixte, chiffres.
+          printf '%s' 'مرحبا بكم في الحافظة' | pbcopy; sleep 2
+          printf '%s' 'رقم الطلب 12345 — Order ID: AB-77' | pbcopy; sleep 2
+          printf '%s' 'كلمة السر: نسخ ولصق' | pbcopy; sleep 2
+          ls /System/Library/Fonts/ | grep -iE "arab|geeza|baghdad|nadeem" > shots/fonts-ar.txt || true
+          sleep 2
           printf 'demo' > "/tmp/Présentation client.mov"
           osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
           sleep 2
