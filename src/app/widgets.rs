@@ -366,6 +366,35 @@ mod tests {
                 .unwrap()
         };
         assert!(x('C') < x('o') && x('o') < x('p') && x('p') < x('Q'));
+        // Chemins et dimensions isolés : gardent leur sens de gauche à droite.
+        for (text, before, after) in [
+            (
+                format!("منذ 1 د  ·  {}", i18n::ltr_isolate("/tmp")),
+                '/',
+                't',
+            ),
+            (
+                format!("منذ 2 د · {} · 20 ك.ب", i18n::ltr_isolate("1280 × 720")),
+                '1',
+                '7',
+            ),
+        ] {
+            let job = bidi_job_with_base(&text, 12.0, Color32::WHITE, true);
+            let galley = ctx.fonts_mut(|f| f.layout_job(job));
+            let x = |c: char| {
+                galley
+                    .rows
+                    .iter()
+                    .flat_map(|r| r.glyphs.iter())
+                    .find(|g| g.chr == c)
+                    .map(|g| g.pos.x)
+                    .unwrap()
+            };
+            assert!(
+                x(before) < x(after),
+                "{text:?} : « {before} » doit précéder « {after} »"
+            );
+        }
         // Ponctuation de fin de phrase à gauche (fin de la lecture).
         let read = read_rtl(&ctx, "عند تجاوزه، يحذف الأقدم.");
         assert!(read.ends_with('.'), "{read}");
