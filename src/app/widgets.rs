@@ -292,4 +292,73 @@ mod tests {
             "lignes lues de droite à gauche : {read:?}"
         );
     }
+
+    /// Toutes les traductions arabes (sur une ou plusieurs lignes) : les lettres arabes
+    /// lues de droite à gauche sont dans l'ordre logique. Chiffres, latin et signes
+    /// diacritiques sont ignorés (ils ont leur propre sens de lecture ou pas de largeur).
+    #[test]
+    fn every_arabic_translation_reads_in_order() {
+        let Some(bytes) = [
+            "/System/Library/Fonts/SFArabic.ttf",
+            "/System/Library/Fonts/GeezaPro.ttc",
+        ]
+        .iter()
+        .find_map(|p| std::fs::read(p).ok()) else {
+            return;
+        };
+        let ctx = egui::Context::default();
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "ar".into(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        fonts
+            .families
+            .get_mut(&egui::FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "ar".into());
+        ctx.set_fonts(fonts);
+        let mut frame = ctx.run_ui(Default::default(), |_| {});
+        frame.textures_delta.clear();
+        let font = FontId::proportional(12.0);
+        let layout = |s: &str| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(crate::i18n::rtl_line(s), font.clone(), Color32::WHITE)
+            })
+        };
+        let letters = |s: &str| -> String {
+            s.chars()
+                .filter(|c| matches!(*c as u32, 0x0621..=0x064A))
+                .collect()
+        };
+        let ar: std::collections::HashMap<String, String> =
+            serde_json::from_str(include_str!("../../locales/ar.json")).unwrap();
+        let mut multi_line = 0;
+        for (key, text) in &ar {
+            let lines = break_lines(text, 200.0, |s| layout(s).size().x);
+            multi_line += usize::from(lines.len() > 1);
+            let mut read = String::new();
+            for line in &lines {
+                let galley = layout(line);
+                let mut glyphs: Vec<(char, f32)> = galley
+                    .rows
+                    .iter()
+                    .flat_map(|r| r.glyphs.iter())
+                    .filter(|g| g.advance_width > 0.01)
+                    .map(|g| (g.chr, g.pos.x))
+                    .collect();
+                glyphs.sort_by(|a, b| b.1.total_cmp(&a.1));
+                read.extend(glyphs.iter().map(|g| g.0));
+            }
+            assert_eq!(
+                letters(&read),
+                letters(text),
+                "{key} : « {text} » mal ordonné (lignes {lines:?})"
+            );
+        }
+        assert!(
+            multi_line >= 5,
+            "des textes sur plusieurs lignes sont testés"
+        );
+    }
 }
