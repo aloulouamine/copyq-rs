@@ -516,10 +516,10 @@ impl CopyApp {
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
                 .hint_text(RichText::new(t!("search.hint")).color(p.text_faint))
-                .horizontal_align(if i18n::is_rtl() {
-                    egui::Align::RIGHT
+                .align(if i18n::is_rtl() {
+                    Align2::RIGHT_CENTER
                 } else {
-                    egui::Align::LEFT
+                    Align2::LEFT_CENTER
                 })
                 .desired_width(ui.available_width() - 64.0),
         );
