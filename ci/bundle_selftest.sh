@@ -21,7 +21,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleLocalizations</key><array>
     <string>en</string><string>fr</string><string>de</string><string>es</string>
     <string>it</string><string>pt-BR</string><string>ja</string><string>ko</string>
-    <string>zh-Hans</string><string>zh-Hant</string>
+    <string>zh-Hans</string><string>zh-Hant</string><string>ar</string>
   </array>
 </dict></plist>
 PLIST

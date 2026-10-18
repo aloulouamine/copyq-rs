@@ -1,6 +1,8 @@
-//! Traductions de l'interface : 10 langues, choisies parmi les principaux marchés de
+//! Traductions de l'interface : 11 langues, choisies parmi les principaux marchés de
 //! l'App Store (États-Unis/Royaume-Uni, Japon, Allemagne, Corée, France, Brésil,
-//! Espagne/Amérique latine, Chine, Taïwan/Hong Kong, Italie).
+//! Espagne/Amérique latine, Chine, Taïwan/Hong Kong, Italie, pays du Golfe).
+//!
+//! L'arabe s'écrit de droite à gauche : `is_rtl()` inverse alors la mise en page.
 //!
 //! Les textes sont dans `locales/<langue>.json` (embarqués dans le binaire) ; l'anglais
 //! sert de référence et de secours. Dans le code : `t!("clé")`, ou avec des valeurs
@@ -26,9 +28,10 @@ pub enum Lang {
     Ko,
     ZhHans,
     ZhHant,
+    Ar,
 }
 
-pub const ALL: [Lang; 10] = [
+pub const ALL: [Lang; 11] = [
     Lang::En,
     Lang::Fr,
     Lang::De,
@@ -39,6 +42,7 @@ pub const ALL: [Lang; 10] = [
     Lang::Ko,
     Lang::ZhHans,
     Lang::ZhHant,
+    Lang::Ar,
 ];
 
 impl Lang {
@@ -55,6 +59,7 @@ impl Lang {
             Lang::Ko => "ko",
             Lang::ZhHans => "zh-Hans",
             Lang::ZhHant => "zh-Hant",
+            Lang::Ar => "ar",
         }
     }
 
@@ -71,7 +76,13 @@ impl Lang {
             Lang::Ko => "한국어",
             Lang::ZhHans => "简体中文",
             Lang::ZhHant => "繁體中文",
+            Lang::Ar => "العربية",
         }
+    }
+
+    /// Écriture de droite à gauche : mise en page en miroir.
+    pub fn is_rtl(self) -> bool {
+        self == Lang::Ar
     }
 
     /// Écritures chinoise, japonaise ou coréenne : il faut une police système en plus.
@@ -91,6 +102,7 @@ impl Lang {
             Lang::Ko => include_str!("../locales/ko.json"),
             Lang::ZhHans => include_str!("../locales/zh-Hans.json"),
             Lang::ZhHant => include_str!("../locales/zh-Hant.json"),
+            Lang::Ar => include_str!("../locales/ar.json"),
         }
     }
 
@@ -122,6 +134,7 @@ impl Lang {
             "ko" => Lang::Ko,
             "zh" if has("hant") || has("tw") || has("hk") || has("mo") => Lang::ZhHant,
             "zh" => Lang::ZhHans,
+            "ar" => Lang::Ar,
             _ => return None,
         })
     }
@@ -133,6 +146,11 @@ static CURRENT: AtomicUsize = AtomicUsize::new(1);
 
 pub fn current() -> Lang {
     ALL[CURRENT.load(Ordering::Relaxed) % ALL.len()]
+}
+
+/// Interface en miroir (langue écrite de droite à gauche) ?
+pub fn is_rtl() -> bool {
+    current().is_rtl()
 }
 
 pub fn set(lang: Lang) {
@@ -339,6 +357,9 @@ mod tests {
         assert_eq!(Lang::from_locale("zh-Hant-TW"), Some(Lang::ZhHant));
         assert_eq!(Lang::from_locale("zh-HK"), Some(Lang::ZhHant));
         assert_eq!(Lang::from_locale("ja_JP"), Some(Lang::Ja));
+        assert_eq!(Lang::from_locale("ar-SA"), Some(Lang::Ar));
+        assert_eq!(Lang::from_locale("ar_AE"), Some(Lang::Ar));
+        assert!(Lang::Ar.is_rtl() && !Lang::Fr.is_rtl());
         assert_eq!(Lang::from_locale("nl-NL"), None);
         assert_eq!(resolve("de"), Lang::De);
         for lang in ALL {

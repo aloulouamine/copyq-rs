@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use widgets::{empty_state, ghost_button, kbd, toggle};
+use widgets::{empty_state, ghost_button, hstack, hwrap, kbd, toggle, trailing};
 
 const SETTINGS_POPUP: &str = "settings_popup";
 /// Hauteur réservée en haut pour les boutons de fenêtre macOS (barre de titre transparente).
@@ -489,7 +489,7 @@ impl CopyApp {
                     .corner_radius(10.0)
                     .inner_margin(Margin::symmetric(12, 9))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| self.search_field(ctx, ui, p, shown, total));
+                        hstack(ui, |ui| self.search_field(ctx, ui, p, shown, total));
                     });
             });
     }
@@ -516,6 +516,11 @@ impl CopyApp {
                 .font(FontId::proportional(16.0))
                 .text_color(p.text)
                 .hint_text(RichText::new(t!("search.hint")).color(p.text_faint))
+                .horizontal_align(if i18n::is_rtl() {
+                    egui::Align::RIGHT
+                } else {
+                    egui::Align::LEFT
+                })
                 .desired_width(ui.available_width() - 64.0),
         );
         if edit.changed() {
@@ -526,7 +531,7 @@ impl CopyApp {
         if ctx.memory(|m| m.focused().is_none()) {
             edit.request_focus();
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.with_layout(trailing(), |ui| {
             ui.label(RichText::new(count).size(12.0).color(p.text_faint));
         });
     }
@@ -545,7 +550,7 @@ impl CopyApp {
                 let r = ui.clip_rect();
                 ui.painter()
                     .hline(r.x_range(), r.top(), Stroke::new(1.0_f32, p.border));
-                ui.horizontal(|ui| {
+                hstack(ui, |ui| {
                     let mut paused = self.shared.paused.load(Ordering::Relaxed);
                     if toggle(ui, &mut paused, t!("footer.pause"), p)
                         .on_hover_text(t!("footer.pause_tip"))
@@ -553,7 +558,7 @@ impl CopyApp {
                     {
                         self.shared.paused.store(paused, Ordering::Relaxed);
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(trailing(), |ui| {
                         self.footer_buttons(ui, p, total);
                     });
                 });
@@ -583,12 +588,16 @@ impl CopyApp {
         egui::Popup::from_toggle_button_response(&button)
             .id(egui::Id::unique(SETTINGS_POPUP))
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .align(egui::RectAlign::TOP_END)
+            .align(if i18n::is_rtl() {
+                egui::RectAlign::TOP_START
+            } else {
+                egui::RectAlign::TOP_END
+            })
             .show(|ui| self.settings_ui(ui, p));
     }
 
     fn shortcuts_ui(&self, ui: &mut Ui, p: &Palette) {
-        ui.horizontal_wrapped(|ui| {
+        hwrap(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             let enter = if self.settings.auto_paste {
                 t!("keys.paste")
@@ -695,7 +704,7 @@ impl CopyApp {
                     .corner_radius(18.0)
                     .inner_margin(Margin::symmetric(14, 7))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
+                        hstack(ui, |ui| {
                             ui.label(
                                 RichText::new("●")
                                     .size(10.0)

@@ -117,15 +117,17 @@ pub(super) fn row_ui(
     }
     let hovered = ui.rect_contains_pointer(rect);
     let painter = ui.painter_at(rect);
+    // Positions calculées de gauche à droite, puis mises en miroir en arabe.
+    let m = Mirror::new(rect, crate::i18n::is_rtl());
 
     // Fond.
     if selected {
         painter.rect_filled(rect, 10.0, p.accent_soft);
         painter.rect_filled(
-            Rect::from_min_size(
+            m.rect(Rect::from_min_size(
                 egui::pos2(rect.left() + 1.0, rect.top() + 15.0),
                 egui::vec2(3.0, rect.height() - 30.0),
-            ),
+            )),
             2.0,
             p.accent,
         );
@@ -139,12 +141,15 @@ pub(super) fn row_ui(
         egui::pos2(inner.left() + 15.0, rect.center().y),
         egui::vec2(30.0, 30.0),
     );
+    let tile_shown = m.rect(tile);
     let text_x = if let Some(tex) = thumb {
         // Vignette, proportions respectées, dans un cadre de 96 × 60.
         let frame = Rect::from_min_size(
             egui::pos2(inner.left(), rect.center().y - 30.0),
             egui::vec2(96.0, 60.0),
         );
+        let text_start = frame.right() + 12.0;
+        let frame = m.rect(frame);
         let [w, h] = tex.size();
         let scale = (frame.width() / w as f32)
             .min(frame.height() / h as f32)
@@ -163,22 +168,22 @@ pub(super) fn row_ui(
             Stroke::new(1.0_f32, p.border),
             StrokeKind::Inside,
         );
-        frame.right() + 12.0
+        text_start
     } else {
         painter.rect_filled(
-            tile,
+            tile_shown,
             8.0,
             if selected { p.surface } else { p.surface_hover },
         );
         painter.rect_stroke(
-            tile,
+            tile_shown,
             8.0,
             Stroke::new(1.0_f32, p.border),
             StrokeKind::Inside,
         );
         row.kind.paint(
             &painter,
-            tile.center(),
+            tile_shown.center(),
             if selected { p.accent } else { p.text_muted },
         );
         tile.right() + 12.0
@@ -190,18 +195,21 @@ pub(super) fn row_ui(
     let meta = single_line(ui, &meta_text(row, now), 11.5, p.text_faint, max_w);
     let total_h = title.size().y + 3.0 + meta.size().y;
     let top = rect.center().y - total_h / 2.0;
-    painter.galley(egui::pos2(text_x, top), title.clone(), p.text);
+    let title_x = m.text_start(text_x, title.size().x);
+    let meta_x = m.text_start(text_x, meta.size().x);
+    painter.galley(egui::pos2(title_x, top), title.clone(), p.text);
     painter.galley(
-        egui::pos2(text_x, top + title.size().y + 3.0),
+        egui::pos2(meta_x, top + title.size().y + 3.0),
         meta,
         p.text_faint,
     );
 
     // Côté droit : bouton supprimer au survol, sinon indice « ↵ » sur la sélection.
-    let action_rect = Rect::from_center_size(
+    let action_ltr = Rect::from_center_size(
         egui::pos2(inner.right() - 12.0, rect.center().y),
         egui::vec2(26.0, 26.0),
     );
+    let action_rect = m.rect(action_ltr);
     let mut action = RowAction::None;
     if hovered {
         let del = ui
@@ -224,7 +232,7 @@ pub(super) fn row_ui(
             action = RowAction::Delete;
         }
 
-        let lock_rect = action_rect.translate(egui::vec2(-30.0, 0.0));
+        let lock_rect = m.rect(action_ltr.translate(egui::vec2(-30.0, 0.0)));
         let lock = (row.item_kind == ItemKind::Text).then(|| {
             ui.interact(lock_rect, resp.id.with("lock"), Sense::click())
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -278,6 +286,53 @@ pub(super) fn row_ui(
         ui.label(RichText::new(text).size(12.5));
     });
     action
+}
+
+/// Miroir horizontal d'une ligne pour les langues écrites de droite à gauche : le
+/// dessin est calculé de gauche à droite, puis chaque position est retournée.
+#[derive(Clone, Copy, Debug)]
+struct Mirror {
+    left: f32,
+    right: f32,
+    on: bool,
+}
+
+impl Mirror {
+    fn new(bounds: Rect, on: bool) -> Self {
+        Self {
+            left: bounds.left(),
+            right: bounds.right(),
+            on,
+        }
+    }
+
+    fn x(self, x: f32) -> f32 {
+        if self.on {
+            self.left + self.right - x
+        } else {
+            x
+        }
+    }
+
+    fn rect(self, r: Rect) -> Rect {
+        if !self.on {
+            return r;
+        }
+        Rect::from_min_max(
+            egui::pos2(self.x(r.right()), r.top()),
+            egui::pos2(self.x(r.left()), r.bottom()),
+        )
+    }
+
+    /// Position gauche d'un texte de largeur `width` qui commence, dans le sens de
+    /// lecture, en `x` : il s'étend vers la gauche en arabe.
+    fn text_start(self, x: f32, width: f32) -> f32 {
+        if self.on {
+            self.x(x) - width
+        } else {
+            x
+        }
+    }
 }
 
 fn row_height(row: &Row) -> f32 {
@@ -474,6 +529,25 @@ mod tests {
 
     fn text_row(text: &str) -> Row {
         build_row(0, &Item::text(text, 0, false))
+    }
+
+    #[test]
+    fn rows_are_mirrored_for_right_to_left_languages() {
+        let bounds = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(500.0, 54.0));
+        let tile = Rect::from_min_max(egui::pos2(12.0, 12.0), egui::pos2(42.0, 42.0));
+        let ltr = Mirror::new(bounds, false);
+        assert_eq!(ltr.rect(tile), tile);
+        assert_eq!(ltr.text_start(54.0, 100.0), 54.0);
+        let rtl = Mirror::new(bounds, true);
+        let shown = rtl.rect(tile);
+        assert_eq!(
+            (shown.left(), shown.right()),
+            (458.0, 488.0),
+            "icône à droite"
+        );
+        assert_eq!(shown.height(), tile.height());
+        // Le texte finit là où il commencerait de gauche à droite, vu dans le miroir.
+        assert_eq!(rtl.text_start(54.0, 100.0), 346.0);
     }
 
     #[test]

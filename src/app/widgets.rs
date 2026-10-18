@@ -22,6 +22,45 @@ pub(super) fn single_line(
     ui.painter().layout_job(job)
 }
 
+/// Ligne horizontale dans le sens de lecture : de droite à gauche en arabe.
+pub(super) fn hstack<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    if crate::i18n::is_rtl() {
+        let size = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+        ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), add)
+    } else {
+        ui.horizontal(add)
+    }
+}
+
+/// Comme `hstack`, avec retour à la ligne.
+pub(super) fn hwrap<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<R> {
+    if crate::i18n::is_rtl() {
+        let size = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+        let layout = egui::Layout::right_to_left(egui::Align::Center).with_main_wrap(true);
+        ui.allocate_ui_with_layout(size, layout, add)
+    } else {
+        ui.horizontal_wrapped(add)
+    }
+}
+
+/// Disposition des éléments poussés au bout de la ligne (à droite, à gauche en arabe).
+pub(super) fn trailing() -> egui::Layout {
+    if crate::i18n::is_rtl() {
+        egui::Layout::left_to_right(egui::Align::Center)
+    } else {
+        egui::Layout::right_to_left(egui::Align::Center)
+    }
+}
+
+/// Colonne alignée sur le début de la ligne (à droite en arabe, textes compris).
+pub(super) fn column() -> egui::Layout {
+    egui::Layout::top_down(if crate::i18n::is_rtl() {
+        egui::Align::Max
+    } else {
+        egui::Align::Min
+    })
+}
+
 pub(super) fn empty_state(ui: &mut Ui, history_empty: bool, query: &str, p: &Palette) {
     ui.vertical_centered(|ui| {
         ui.add_space((ui.available_height() / 2.0 - 60.0).max(20.0));

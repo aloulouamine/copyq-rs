@@ -135,9 +135,10 @@ fn style(mut v: egui::Visuals, p: &Palette) -> egui::Style {
     s
 }
 
-/// Utilise la police système de macOS (SF Pro) si elle est disponible, plus une police
-/// chinoise, japonaise ou coréenne du système quand l'interface est dans l'une de ces
-/// langues, en gardant les polices d'egui en secours (emoji, symboles).
+/// Utilise la police système de macOS (SF Pro) si elle est disponible, la police arabe
+/// du système en secours, plus une police chinoise, japonaise ou coréenne quand
+/// l'interface est dans l'une de ces langues ; les polices d'egui restent en secours
+/// (emoji, symboles).
 pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
     let mut fonts = egui::FontDefinitions::default();
     let mut first = 0;
@@ -158,6 +159,18 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
     ];
     if let Some(bytes) = system.iter().find_map(|p| std::fs::read(p).ok()) {
         add(&mut fonts, "system", bytes);
+    }
+    // Arabe : police système en secours pour tout le monde (sans elle, un texte
+    // arabe copié s'affiche en carrés vides), et pour l'interface en arabe.
+    let arabic = [
+        "/System/Library/Fonts/SFArabic.ttf",
+        "/System/Library/Fonts/GeezaPro.ttc",
+        "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
+    ];
+    if let Some(bytes) = arabic.iter().find_map(|p| std::fs::read(p).ok()) {
+        add(&mut fonts, "arabic", bytes);
+    } else {
+        log::warn!("police arabe introuvable : le texte arabe s'affichera mal");
     }
     let cjk = cjk_font_candidates(lang);
     match cjk

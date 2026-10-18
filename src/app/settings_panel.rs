@@ -1,6 +1,6 @@
 //! Panneau « Réglages » : onglets Général et Limites.
 
-use super::widgets::{caption, ghost_button, toggle};
+use super::widgets::{caption, column, ghost_button, hstack, hwrap, toggle, trailing};
 use super::{CopyApp, SettingsTab};
 use crate::history;
 use crate::logging::LockExt;
@@ -11,18 +11,22 @@ use eframe::egui::{self, Color32, RichText, Stroke, Ui};
 use std::sync::atomic::Ordering;
 
 impl CopyApp {
-    /// Contenu du panneau « Réglages ».
+    /// Contenu du panneau « Réglages » (aligné à droite en arabe).
     pub(super) fn settings_ui(&mut self, ui: &mut Ui, p: &Palette) {
         ui.set_width(330.0);
+        ui.with_layout(column(), |ui| self.settings_body(ui, p));
+    }
+
+    fn settings_body(&mut self, ui: &mut Ui, p: &Palette) {
         ui.spacing_mut().item_spacing.y = 4.0;
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             ui.label(
                 RichText::new(t!("settings.title"))
                     .size(13.5)
                     .color(p.text)
                     .strong(),
             );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(trailing(), |ui| {
                 for (tab, label) in [
                     (SettingsTab::Limits, t!("settings.tab_limits")),
                     (SettingsTab::General, t!("settings.tab_general")),
@@ -64,9 +68,9 @@ impl CopyApp {
             .take()
             .unwrap_or_else(|| self.settings.clone());
         let row = |ui: &mut Ui, label: &str, help: &str, add: &mut dyn FnMut(&mut Ui)| {
-            ui.horizontal(|ui| {
+            hstack(ui, |ui| {
                 ui.label(RichText::new(label).size(12.5).color(p.text));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(trailing(), |ui| {
                     // Champs bien visibles : cadre, largeur minimale.
                     let v = ui.visuals_mut();
                     for w in [
@@ -161,14 +165,14 @@ impl CopyApp {
 
         let mut changed = false;
         let pending = draft != self.settings;
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             let defaults = self.settings.with_default_limits();
             if draft != defaults
                 && ghost_button(ui, t!("limits.defaults"), p.text_muted, p).clicked()
             {
                 draft = defaults;
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(trailing(), |ui| {
                 if pending {
                     let apply =
                         egui::Button::new(RichText::new(t!("limits.apply")).color(Color32::WHITE))
@@ -211,7 +215,7 @@ impl CopyApp {
     fn general_settings_ui(&mut self, ui: &mut Ui, p: &Palette) -> bool {
         let mut changed = self.language_ui(ui, p);
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             if toggle(
                 ui,
                 &mut self.settings.auto_paste,
@@ -228,7 +232,7 @@ impl CopyApp {
         });
         caption(ui, t!("general.auto_paste_help"), p);
         if self.settings.auto_paste && !paste::is_trusted() {
-            ui.horizontal_wrapped(|ui| {
+            hwrap(ui, |ui| {
                 ui.label(
                     RichText::new(t!("general.accessibility_needed"))
                         .size(11.5)
@@ -241,7 +245,7 @@ impl CopyApp {
         }
         ui.add_space(8.0);
         if !self.settings.auto_paste {
-            ui.horizontal(|ui| {
+            hstack(ui, |ui| {
                 changed |= toggle(
                     ui,
                     &mut self.settings.hide_after_copy,
@@ -254,7 +258,7 @@ impl CopyApp {
             ui.add_space(8.0);
         }
 
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             if toggle(
                 ui,
                 &mut self.settings.save_images,
@@ -279,8 +283,7 @@ impl CopyApp {
         );
         let resp = ui
             .add_enabled_ui(available, |ui| {
-                ui.horizontal(|ui| toggle(ui, &mut on, t!("general.open_at_login"), p))
-                    .inner
+                hstack(ui, |ui| toggle(ui, &mut on, t!("general.open_at_login"), p)).inner
             })
             .inner;
         if available && resp.changed() {
@@ -297,7 +300,7 @@ impl CopyApp {
         );
         ui.add_space(8.0);
 
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             if toggle(
                 ui,
                 &mut self.settings.save_passwords,
@@ -318,7 +321,7 @@ impl CopyApp {
         });
         caption(ui, t!("general.save_passwords_help"), p);
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             if toggle(
                 ui,
                 &mut self.settings.detect_passwords,
@@ -376,13 +379,13 @@ impl CopyApp {
             None => t!("settings.language_auto", name = system.native_name()),
         };
         let before = self.settings.language.clone();
-        ui.horizontal(|ui| {
+        hstack(ui, |ui| {
             ui.label(
                 RichText::new(t!("settings.language"))
                     .size(12.5)
                     .color(p.text_muted),
             );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(trailing(), |ui| {
                 egui::ComboBox::from_id_salt("language")
                     .selected_text(label(&self.settings.language))
                     .show_ui(ui, |ui| {
