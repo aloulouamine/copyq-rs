@@ -87,8 +87,6 @@ impl CopyApp {
             t!("limits.items"),
             t!("limits.oldest_deleted"),
             &mut |ui| {
-                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
-                unit_label(ui, t!("limits.unit_kb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_items)
                         .range(settings::ITEMS_RANGE)
@@ -109,6 +107,8 @@ impl CopyApp {
             t!("limits.text_size"),
             t!("limits.text_size_help"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_kb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_text_kb)
                         .range(settings::TEXT_KB_RANGE)
