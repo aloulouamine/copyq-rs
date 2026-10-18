@@ -146,8 +146,9 @@ fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
 mod tests {
     use eframe::egui;
 
-    /// Diagnostic : position horizontale de chaque caractère tel qu'egui le dessine.
-    fn glyph_xs(text: &str) -> Option<Vec<(char, f32)>> {
+    /// Diagnostic : pour chaque ligne, les caractères lus de droite à gauche (ordre
+    /// visuel), à comparer avec le texte logique.
+    fn rows_read_rtl(text: &str, wrap: f32) -> Option<Vec<String>> {
         let bytes = [
             "/System/Library/Fonts/SFArabic.ttf",
             "/System/Library/Fonts/GeezaPro.ttc",
@@ -169,17 +170,33 @@ mod tests {
         let mut frame = ctx.run_ui(Default::default(), |_| {});
         frame.textures_delta.clear();
         let galley = ctx.fonts_mut(|f| {
-            f.layout_no_wrap(
+            f.layout(
                 text.to_owned(),
                 egui::FontId::proportional(14.0),
                 egui::Color32::WHITE,
+                wrap,
             )
         });
         Some(
             galley
                 .rows
                 .iter()
-                .flat_map(|r| r.glyphs.iter().map(|g| (g.chr, g.pos.x)))
+                .map(|r| {
+                    let mut g: Vec<(char, f32, f32)> = r
+                        .glyphs
+                        .iter()
+                        .filter(|g| g.advance_width > 0.01 || g.chr == ' ')
+                        .map(|g| (g.chr, g.pos.x, g.advance_width))
+                        .collect();
+                    g.sort_by(|a, b| b.1.total_cmp(&a.1));
+                    let s: String = g.iter().map(|x| x.0).collect();
+                    format!(
+                        "[{} glyphes, x {:.0}..{:.0}] {s}",
+                        g.len(),
+                        g.last().map_or(0.0, |x| x.1),
+                        g.first().map_or(0.0, |x| x.1)
+                    )
+                })
                 .collect(),
         )
     }
@@ -187,10 +204,22 @@ mod tests {
     #[test]
     fn diagnostic_bidi() {
         let mut out = String::new();
-        for text in ["مسح الكل", "\u{200F}مسح الكل.\u{200F}", "abc def"] {
-            let Some(xs) = glyph_xs(text) else { return };
-            let xs: Vec<String> = xs.iter().map(|(c, x)| format!("{c}@{x:.0}")).collect();
-            out += &format!("\n{text:?} => {}", xs.join(" "));
+        let samples = [
+            ("مسح الكل", 1000.0),
+            ("\u{200F}عند تجاوزه، يُحذف الأقدم.\u{200F}", 1000.0),
+            (
+                "\u{200F}يُلصق العنصر المختار مباشرةً في التطبيق الذي فتحت منه السجل (⌘⇧Z).\u{200F}",
+                200.0,
+            ),
+        ];
+        for (text, wrap) in samples {
+            let Some(rows) = rows_read_rtl(text, wrap) else {
+                return;
+            };
+            out += &format!("\nTEXTE {text:?}");
+            for r in rows {
+                out += &format!("\n  {r}");
+            }
         }
         panic!("DIAG{out}");
     }
