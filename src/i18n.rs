@@ -255,9 +255,8 @@ pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
 /// gauche, ponctuation et chiffres compris. Sinon, inchangé.
 pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
     let first_strong = text.chars().find(|c| c.is_alphabetic());
-    let rtl = first_strong.is_some_and(|c| {
-        matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
-    });
+    let rtl = first_strong
+        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF));
     if rtl {
         format!("{RLM}{text}{RLM}").into()
     } else {
