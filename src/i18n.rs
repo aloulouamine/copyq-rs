@@ -334,7 +334,7 @@ pub fn starts_rtl(text: &str) -> bool {
 
 /// Texte sans les marques de direction (U+200E, U+200F).
 pub fn strip_marks(text: &str) -> String {
-    text.chars().filter(|c| !matches!(c, LRM | RLM)).collect()
+    text.chars().filter(|c| !matches!(*c, LRM | RLM)).collect()
 }
 
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).
