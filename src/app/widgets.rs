@@ -166,7 +166,8 @@ mod tests {
             .unwrap()
             .insert(0, "arabic".into());
         ctx.set_fonts(fonts);
-        let _ = ctx.run_ui(Default::default(), |_| {});
+        let mut frame = ctx.run_ui(Default::default(), |_| {});
+        frame.textures_delta.clear();
         let galley = ctx.fonts_mut(|f| {
             f.layout_no_wrap(
                 text.to_owned(),
