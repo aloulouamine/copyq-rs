@@ -293,7 +293,7 @@ mod tests {
             (Lang::ZhHans, "SC"),
             (Lang::ZhHant, "TC"),
             (Lang::Ja, "Hiragino Sans"),
-            (Lang::Ko, "Gothic"),
+            (Lang::Ko, "Apple SD"),
         ] {
             let (path, index) = cjk_font_candidates(lang)
                 .iter()
