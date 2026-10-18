@@ -1,6 +1,6 @@
 //! Panneau « Réglages » : onglets Général et Limites.
 
-use super::widgets::{caption, column, ghost_button, hstack, hwrap, toggle, trailing};
+use super::widgets::{caption, column, ghost_button, hstack, hwrap, paragraph, toggle, trailing};
 use super::{CopyApp, SettingsTab};
 use crate::history;
 use crate::logging::LockExt;
@@ -345,13 +345,11 @@ impl CopyApp {
             self.reclassify();
         }
         if let Some(err) = storage::encryption_error() {
-            ui.add(
-                egui::Label::new(
-                    RichText::new(t!("general.keychain_error", error = err))
-                        .size(11.5)
-                        .color(p.danger),
-                )
-                .wrap(),
+            paragraph(
+                ui,
+                &t!("general.keychain_error", error = err),
+                11.5,
+                p.danger,
             );
         }
         let stored = self.history.lock_safe().sensitive_count();

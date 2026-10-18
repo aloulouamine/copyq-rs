@@ -254,14 +254,30 @@ pub fn trf(key: &'static str, args: &[(&str, &dyn Display)]) -> String {
 /// l'hébreu…), il est encadré de marques RLM pour que egui le compose de droite à
 /// gauche, ponctuation et chiffres compris. Sinon, inchangé.
 pub fn display_dir(text: &str) -> std::borrow::Cow<'_, str> {
-    let first_strong = text.chars().find(|c| c.is_alphabetic());
-    let rtl = first_strong
-        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF));
-    if rtl {
+    if starts_rtl(text) {
         format!("{RLM}{text}{RLM}").into()
     } else {
         text.into()
     }
+}
+
+/// Vrai si le texte commence (première lettre) par une écriture de droite à gauche.
+pub fn starts_rtl(text: &str) -> bool {
+    text.chars()
+        .find(|c| c.is_alphabetic())
+        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF))
+}
+
+/// Texte sans les marques de direction (U+200E, U+200F).
+pub fn strip_marks(text: &str) -> String {
+    text.chars()
+        .filter(|c| !matches!(c, '\u{200E}' | '\u{200F}'))
+        .collect()
+}
+
+/// Une ligne à composer de droite à gauche (encadrée de marques RLM).
+pub fn rtl_line(line: &str) -> String {
+    format!("{RLM}{line}{RLM}")
 }
 
 /// Nombre à une décimale avec le séparateur de la langue (« 2,5 » ou « 2.5 »).

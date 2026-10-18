@@ -283,7 +283,8 @@ pub(super) fn row_ui(
         } else {
             tooltip(hist, row.index)
         };
-        ui.label(RichText::new(text).size(12.5));
+        let color = ui.visuals().text_color();
+        super::widgets::paragraph(ui, &text, 12.5, color);
     });
     action
 }
