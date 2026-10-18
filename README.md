@@ -9,6 +9,7 @@ Gestionnaire d'historique du presse-papiers pour macOS, inspiré de [CopyQ](http
 - **Images** (captures d'écran, « Copier l'image »…) : vignette dans la liste, aperçu au survol, recopie en un clic ; PNG sans perte **chiffrés** dans `…/com.amine.copyq-rs/images/` (`.png.enc`), 50 images au plus par défaut (réglage **Enregistrer les images**)
 - **Fichiers copiés dans le Finder** (vidéos, sons, PDF, dossiers…) : gardés par leur emplacement, recopiables pour les coller ailleurs ; signalés « introuvable » s'ils ont été déplacés
 - **Limites réglables** (Réglages → onglet *Limites*) : nombre d'éléments (500 par défaut), d'images (50), taille d'un texte (1 000 Ko), taille totale des textes (200 Mo), d'une image (50 Mpx), durée de conservation (illimitée par défaut ; 1 jour à 1 an). Les changements s'appliquent avec **Appliquer**, qui indique d'abord combien d'éléments seront supprimés ; **Valeurs par défaut** restaure les réglages d'origine
+- **10 langues** (Réglages → Général → *Langue*) : anglais, français, allemand, espagnol, italien, portugais (Brésil), japonais, coréen, chinois simplifié et traditionnel — les principaux marchés de l'App Store. Par défaut, la langue de macOS (anglais si elle n'est pas traduite) ; polices système chinoises, japonaises et coréennes chargées au besoin. Textes dans `locales/*.json` ; des tests vérifient que chaque langue a toutes les clés et les mêmes paramètres
 - Recherche instantanée (tous les mots, insensible à la casse)
 - Clic ou **Entrée** : **collé directement** dans l'application d'où l'historique a été ouvert (⌘⇧Z) — nécessite l'autorisation *Accessibilité* (Réglages Système → Confidentialité et sécurité → Accessibilité) ; sans elle, ou si le réglage **Coller automatiquement** est désactivé, l'élément est copié et il reste à faire ⌘V
 - Navigation **↑ / ↓**, **⌘⌫** supprime l'élément sélectionné, **Échap** vide la recherche puis masque
@@ -64,6 +65,7 @@ Chaque `git push` lance sur un Mac GitHub (macOS 14) : tests unitaires, tests de
 | `src/settings.rs` | Réglages persistants (`settings.json`) |
 | `src/media.rs` | Images : PNG, vignettes, empreintes, fichiers chiffrés |
 | `src/paste.rs` | Collage automatique (app d'origine, ⌘V simulé) |
+| `src/i18n.rs`, `locales/` | Traductions (10 langues), détection de la langue de macOS |
 | `src/crypto.rs` | Chiffrement AES-256-GCM (mots de passe, fichiers) et empreintes HMAC |
 | `src/keychain.rs` | Clé de chiffrement dans le trousseau macOS |
 | `src/app/mod.rs` | Interface egui : état, recherche, pied de page, raccourcis clavier |
