@@ -87,6 +87,8 @@ impl CopyApp {
             t!("limits.items"),
             t!("limits.oldest_deleted"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_kb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_items)
                         .range(settings::ITEMS_RANGE)
@@ -111,7 +113,7 @@ impl CopyApp {
                     egui::DragValue::new(&mut draft.max_text_kb)
                         .range(settings::TEXT_KB_RANGE)
                         .speed(10.0)
-                        .suffix(t!("limits.unit_kb")),
+                        .suffix(unit_suffix(t!("limits.unit_kb"))),
                 );
             },
         );
@@ -120,11 +122,13 @@ impl CopyApp {
             t!("limits.total_size"),
             t!("limits.oldest_deleted"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_mb"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_total_mb)
                         .range(settings::TOTAL_MB_RANGE)
                         .speed(5.0)
-                        .suffix(t!("limits.unit_mb")),
+                        .suffix(unit_suffix(t!("limits.unit_mb"))),
                 );
             },
         );
@@ -133,10 +137,12 @@ impl CopyApp {
             t!("limits.image_size"),
             t!("limits.image_size_help"),
             &mut |ui| {
+                // Arabe : l'unité à gauche du nombre (lecture de droite à gauche).
+                unit_label(ui, t!("limits.unit_mpx"), p.text_muted);
                 ui.add(
                     egui::DragValue::new(&mut draft.max_image_mp)
                         .range(settings::IMAGE_MP_RANGE)
-                        .suffix(t!("limits.unit_mpx")),
+                        .suffix(unit_suffix(t!("limits.unit_mpx"))),
                 );
             },
         );
@@ -392,5 +398,21 @@ impl CopyApp {
             self.apply_language(&ctx);
         }
         changed
+    }
+}
+
+/// Unité après un nombre (« 1000 Ko »). En arabe, egui ne compose pas le suffixe d'un
+/// champ numérique de droite à gauche : l'unité est alors un libellé à part.
+fn unit_suffix(unit: &str) -> String {
+    if i18n::is_rtl() {
+        String::new()
+    } else {
+        unit.to_string()
+    }
+}
+
+fn unit_label(ui: &mut Ui, unit: &str, color: Color32) {
+    if i18n::is_rtl() {
+        ui.label(wt(unit.trim(), 12.5, color));
     }
 }
