@@ -82,6 +82,9 @@ jobs:
           sleep 5
           osascript -e 'set the clipboard to (read (POSIX file "/tmp/capture.png") as «class PNGf»)'
           sleep 2
+          # Textes arabes (affichés quelle que soit la langue de l'interface).
+          printf '%s' 'رقم الطلب 12345 — Order ID: AB-77' | pbcopy; sleep 2
+          printf '%s' 'مرحبا بكم في الحافظة' | pbcopy; sleep 2
           printf 'demo' > "/tmp/Présentation client.mov"
           osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
           sleep 2
@@ -107,17 +110,23 @@ jobs:
           screencapture -x shots/limits.png || true
           kill $PID 2>/dev/null || true
           # Traductions : quelques langues, dont les écritures chinoise, japonaise, coréenne.
-          for spec in en:light:0 ja:light:0 ko:dark:1 zh-Hant:light:1 de:dark:limits zh-Hans:dark:0; do
+          for spec in en:light:0 ja:light:0 ko:dark:1 zh-Hant:light:1 de:dark:limits zh-Hans:dark:0 ar:light:0 ar:dark:1 ar:light:limits; do
             IFS=: read -r lang mode settings <<< "$spec"
             sleep 2
             if [ "$settings" = "0" ]; then unset COPYQ_OPEN_SETTINGS; else export COPYQ_OPEN_SETTINGS=$settings; fi
             COPYQ_LANG=$lang COPYQ_THEME=$mode ./target/release/copyq-rs > "shots/run-$lang.log" 2>&1 &
             PID=$!
             sleep 8
-            screencapture -x "shots/lang-$lang.png" || true
+            screencapture -x "shots/lang-$lang-$mode-$settings.png" || true
             kill $PID 2>/dev/null || true
           done
           unset COPYQ_OPEN_SETTINGS
+          # Arabe : recherche saisie en arabe.
+          COPYQ_LANG=ar COPYQ_QUERY='الحافظة' ./target/release/copyq-rs > shots/run-ar-query.log 2>&1 &
+          PID=$!
+          sleep 8
+          screencapture -x shots/lang-ar-query.png || true
+          kill $PID 2>/dev/null || true
           ls -la shots
 
       - name: Publier les captures et journaux (branche ci-results)

@@ -108,7 +108,8 @@ impl CopyApp {
             history,
             shared,
             clipboard: arboard::Clipboard::new().ok(),
-            query: String::new(),
+            // Captures CI : recherche déjà saisie.
+            query: std::env::var("COPYQ_QUERY").unwrap_or_default(),
             selected: 0,
             scroll_to_selected: false,
             settings,
