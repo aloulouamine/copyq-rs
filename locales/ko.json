@@ -34,7 +34,7 @@
   "row.delete": "삭제",
   "row.unmark_password": "암호 아님: 일반 텍스트로 표시(⌘L)",
   "row.mark_password": "암호임: 암호화하고 숨기기(⌘L)",
-  "row.hidden_password_tip": "숨겨진 암호 — 클릭하거나 ↵를 눌러 복사",
+  "row.hidden_password_tip": "숨겨진 암호 — 클릭하거나 return 키를 눌러 복사",
   "row.image": "이미지",
   "row.file": "파일",
   "row.files_more": "{name} 외 {n}개",

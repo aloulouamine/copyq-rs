@@ -34,7 +34,7 @@
   "row.delete": "Supprimer",
   "row.unmark_password": "Ce n'est pas un mot de passe : afficher en clair (⌘L)",
   "row.mark_password": "C'est un mot de passe : chiffrer et masquer (⌘L)",
-  "row.hidden_password_tip": "Mot de passe masqué — cliquez ou ↵ pour le copier",
+  "row.hidden_password_tip": "Mot de passe masqué — cliquez ou appuyez sur Entrée pour le copier",
   "row.image": "Image",
   "row.file": "Fichier",
   "row.files_more": "{name} + {n} autre(s)",

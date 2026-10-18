@@ -335,6 +335,17 @@ fn mirror(c: char) -> char {
     }
 }
 
+/// Texte technique toujours lu de gauche à droite (chemin, dimensions « 1280 × 720 »),
+/// même dans une phrase arabe : encadré d'un isolat (U+2066 … U+2069, invisibles).
+/// Sans lui, « /tmp » deviendrait « tmp/ » et « 1280 × 720 » « 720 × 1280 ».
+pub fn ltr_isolate(text: &str) -> String {
+    if text.is_empty() {
+        String::new()
+    } else {
+        format!("\u{2066}{text}\u{2069}")
+    }
+}
+
 /// Vrai si le texte commence (première lettre) par une écriture de droite à gauche.
 pub fn starts_rtl(text: &str) -> bool {
     text.chars()
@@ -478,6 +489,14 @@ mod tests {
         assert!(visual_pieces("", true).is_empty());
         assert!(has_rtl("abc ج") && !has_rtl("abc"));
         assert!(starts_rtl("12 ج") && !starts_rtl("a ج"));
+        // Isolat : le chemin reste « /tmp », à sa place dans la phrase arabe.
+        let p = visual_pieces(&format!("منذ 2 د · {}", ltr_isolate("/tmp")), true);
+        let shown: String = p.iter().map(|p| p.text.as_str()).collect();
+        assert!(shown.contains("/tmp"), "{shown:?}");
+        assert!(
+            shown.find("/tmp") < shown.find("منذ"),
+            "à gauche de l'arabe : {shown:?}"
+        );
     }
 
     #[test]

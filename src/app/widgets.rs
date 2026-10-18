@@ -366,8 +366,138 @@ mod tests {
                 .unwrap()
         };
         assert!(x('C') < x('o') && x('o') < x('p') && x('p') < x('Q'));
+        // Chemins et dimensions isolés : gardent leur sens de gauche à droite.
+        for (text, before, after) in [
+            (
+                format!("منذ 1 د  ·  {}", i18n::ltr_isolate("/tmp")),
+                '/',
+                't',
+            ),
+            (
+                format!("منذ 2 د · {} · 20 ك.ب", i18n::ltr_isolate("1280 × 720")),
+                '1',
+                '7',
+            ),
+        ] {
+            let job = bidi_job_with_base(&text, 12.0, Color32::WHITE, true);
+            let galley = ctx.fonts_mut(|f| f.layout_job(job));
+            let x = |c: char| {
+                galley
+                    .rows
+                    .iter()
+                    .flat_map(|r| r.glyphs.iter())
+                    .find(|g| g.chr == c)
+                    .map(|g| g.pos.x)
+                    .unwrap()
+            };
+            assert!(
+                x(before) < x(after),
+                "{text:?} : « {before} » doit précéder « {after} »"
+            );
+        }
         // Ponctuation de fin de phrase à gauche (fin de la lecture).
         let read = read_rtl(&ctx, "عند تجاوزه، يحذف الأقدم.");
         assert!(read.ends_with('.'), "{read}");
+    }
+
+    /// Chaque langue, avec les polices que l'app charge pour elle (sur un Mac) :
+    /// aucun caractère sans glyphe, lecture de gauche à droite dans l'ordre pour les
+    /// langues qui s'écrivent ainsi, et pas de ligne qui commence par une ponctuation
+    /// fermante (règle japonaise et chinoise : 、。）」…).
+    #[test]
+    fn every_language_renders_completely_and_in_order() {
+        use crate::i18n::{Lang, ALL};
+        if !std::path::Path::new("/System/Library/Fonts/SFNS.ttf").exists() {
+            return;
+        }
+        let sources = [
+            (Lang::En, include_str!("../../locales/en.json")),
+            (Lang::Fr, include_str!("../../locales/fr.json")),
+            (Lang::De, include_str!("../../locales/de.json")),
+            (Lang::Es, include_str!("../../locales/es.json")),
+            (Lang::It, include_str!("../../locales/it.json")),
+            (Lang::PtBr, include_str!("../../locales/pt-BR.json")),
+            (Lang::Ja, include_str!("../../locales/ja.json")),
+            (Lang::Ko, include_str!("../../locales/ko.json")),
+            (Lang::ZhHans, include_str!("../../locales/zh-Hans.json")),
+            (Lang::ZhHant, include_str!("../../locales/zh-Hant.json")),
+            (Lang::Ar, include_str!("../../locales/ar.json")),
+        ];
+        assert_eq!(sources.len(), ALL.len());
+        let closing = "、。，．,.）」』】〕〉》！？：；!?:;)";
+        let mut problems = Vec::new();
+        for (lang, source) in sources {
+            let ctx = egui::Context::default();
+            crate::theme::install_fonts(&ctx, lang);
+            let mut frame = ctx.run_ui(Default::default(), |_| {});
+            frame.textures_delta.clear();
+            let texts: std::collections::BTreeMap<String, String> =
+                serde_json::from_str(source).unwrap();
+            for (key, text) in &texts {
+                let family = if i18n::has_rtl(text) {
+                    FontFamily::Name(RTL_FAMILY.into())
+                } else {
+                    FontFamily::Proportional
+                };
+                let font = FontId::new(12.0, family);
+                let missing: String = text
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .filter(|c| !ctx.fonts_mut(|f| f.has_glyph(&font, *c)))
+                    .collect();
+                if !missing.is_empty() {
+                    problems.push(format!("{} {key} : sans glyphe {missing:?}", lang.code()));
+                }
+                if lang.is_rtl() {
+                    continue;
+                }
+                // Gauche à droite : position croissante dans l'ordre du texte, à
+                // plusieurs largeurs (le panneau Réglages, les infos-bulles…).
+                for width in [160.0, 220.0, 280.0, 340.0] {
+                    let galley = ctx.fonts_mut(|f| {
+                        f.layout(
+                            text.clone(),
+                            FontId::proportional(11.5),
+                            Color32::WHITE,
+                            width,
+                        )
+                    });
+                    for row in galley.rows.iter() {
+                        let xs: Vec<f32> = row
+                            .glyphs
+                            .iter()
+                            .filter(|g| g.advance_width > 0.01)
+                            .map(|g| g.pos.x)
+                            .collect();
+                        if xs.windows(2).any(|w| w[1] + 0.5 < w[0]) {
+                            problems
+                                .push(format!("{} {key} : ordre gauche-droite rompu", lang.code()));
+                        }
+                        let first = row
+                            .glyphs
+                            .iter()
+                            .map(|g| g.chr)
+                            .find(|c| !c.is_whitespace());
+                        if galley.rows.len() > 1
+                            && first.is_some_and(|c| closing.contains(c))
+                            && matches!(lang, Lang::Ja | Lang::ZhHans | Lang::ZhHant | Lang::Ko)
+                        {
+                            let line: String = row.glyphs.iter().map(|g| g.chr).collect();
+                            problems.push(format!(
+                                "{} {key} : ligne qui commence par « {} » : {line}",
+                                lang.code(),
+                                first.unwrap()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            problems.is_empty(),
+            "{} problème(s) :\n{}",
+            problems.len(),
+            problems.join("\n")
+        );
     }
 }

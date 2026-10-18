@@ -398,11 +398,13 @@ pub(super) fn build_row(i: usize, it: &history::Item) -> Row {
             } else {
                 Kind::File
             };
-            let parent = paths
+            let parent: String = paths
                 .first()
                 .and_then(|p| p.parent())
                 .map(shorten_home)
                 .unwrap_or_default();
+            // Chemin : toujours de gauche à droite, même dans l'interface en arabe.
+            let parent = crate::i18n::ltr_isolate(&parent);
             let missing = !paths.iter().all(|p| p.exists());
             row.detail = if missing {
                 format!("{parent}  ·  {}", t!("row.missing"))

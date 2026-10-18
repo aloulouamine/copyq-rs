@@ -34,7 +34,7 @@ toast.passwords_erased,Message bref affiché 2 à 5 s en bas de la fenêtre,{n} 
 row.delete,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Delete,Supprimer,حذف,,,
 row.unmark_password,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Not a password: show in plain text (⌘L),Ce n'est pas un mot de passe : afficher en clair (⌘L),ليست كلمة سر: اعرضها كنص عادي (⌘L),,,
 row.mark_password,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",This is a password: encrypt and hide (⌘L),C'est un mot de passe : chiffrer et masquer (⌘L),هذه كلمة سر: شفّرها وأخفِها (⌘L),,,
-row.hidden_password_tip,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Hidden password — click or ↵ to copy it,Mot de passe masqué — cliquez ou ↵ pour le copier,كلمة سر مخفية — انقر أو اضغط ↵ لنسخها,,,
+row.hidden_password_tip,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Hidden password — click or press Return to copy it,Mot de passe masqué — cliquez ou appuyez sur Entrée pour le copier,كلمة سر مخفية — انقر أو اضغط مفتاح الرجوع لنسخها,,,
 row.image,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",Image,Image,صورة,,,
 row.file,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",File,Fichier,ملف,,,
 row.files_more,"Ligne de l'historique (titre, infos sous le titre, info-bulle)",{name} + {n} more,{name} + {n} autre(s),{name} و{n} غيره,,,{name} = nom de fichier (souvent en caractères latins)

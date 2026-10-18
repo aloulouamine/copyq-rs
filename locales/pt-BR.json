@@ -34,7 +34,7 @@
   "row.delete": "Apagar",
   "row.unmark_password": "Não é uma senha: exibir sem ocultar (⌘L)",
   "row.mark_password": "É uma senha: criptografar e ocultar (⌘L)",
-  "row.hidden_password_tip": "Senha oculta — clique ou pressione ↵ para copiá-la",
+  "row.hidden_password_tip": "Senha oculta — clique ou pressione Return para copiá-la",
   "row.image": "Imagem",
   "row.file": "Arquivo",
   "row.files_more": "{name} + {n} outro(s)",

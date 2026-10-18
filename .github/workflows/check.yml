@@ -41,7 +41,7 @@ jobs:
         id: tests
         if: steps.clippy.outcome == 'success'
         continue-on-error: true
-        run: cargo test 2>&1 | tail -40 > tests.log
+        run: cargo test 2>&1 | tail -120 > tests.log
       - name: Publier (branche ci-check)
         if: always()
         run: |

@@ -85,6 +85,10 @@ jobs:
           # Textes arabes (affichés quelle que soit la langue de l'interface).
           printf '%s' 'رقم الطلب 12345 — Order ID: AB-77' | pbcopy; sleep 2
           printf '%s' 'مرحبا بكم في الحافظة' | pbcopy; sleep 2
+          # Textes chinois, japonais, coréens (affichés quelle que soit la langue).
+          printf '%s' '会議は15時に変更されました。' | pbcopy; sleep 2
+          printf '%s' '회의가 오후 3시로 변경되었습니다' | pbcopy; sleep 2
+          printf '%s' '會議改到下午三點（第二會議室）' | pbcopy; sleep 2
           printf 'demo' > "/tmp/Présentation client.mov"
           osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
           sleep 2

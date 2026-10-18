@@ -34,7 +34,7 @@
   "row.delete": "削除",
   "row.unmark_password": "パスワードではない:そのまま表示(⌘L)",
   "row.mark_password": "パスワード:暗号化して非表示(⌘L)",
-  "row.hidden_password_tip": "非表示のパスワード — クリックまたは ↵ でコピー",
+  "row.hidden_password_tip": "非表示のパスワード — クリックまたは return キーでコピー",
   "row.image": "画像",
   "row.file": "ファイル",
   "row.files_more": "{name} ほか {n} 件",
