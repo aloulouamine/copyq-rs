@@ -168,7 +168,7 @@ pub fn install_fonts(ctx: &egui::Context, lang: crate::i18n::Lang) {
             log::info!("police {} : {path}", lang.code());
             add(&mut fonts, "cjk", bytes);
         }
-        None if !cjk.is_empty() => {
+        None if lang.is_cjk() => {
             log::warn!(
                 "aucune police système pour {} : caractères manquants",
                 lang.code()
