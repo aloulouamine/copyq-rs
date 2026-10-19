@@ -133,6 +133,13 @@ jobs:
           kill $PID 2>/dev/null || true
           ls -la shots
 
+      - name: Images du README (shots/readme, à copier dans docs/screenshots)
+        continue-on-error: true
+        run: |
+          python3 -m pip install --quiet --user --break-system-packages pillow 2>/dev/null \
+            || python3 -m pip install --quiet --user pillow
+          python3 ci/readme_shots.py shots shots/readme
+
       - name: Publier les captures et journaux (branche ci-results)
         if: always()
         run: |
