@@ -332,7 +332,7 @@ mod tests {
             panel: None,
         };
         let mut items: Vec<egui::Rect> = Vec::new();
-        let mut frame = |events: Vec<egui::Event>, demo: &mut Demo, items: &mut Vec<egui::Rect>| {
+        let frame = |events: Vec<egui::Event>, demo: &mut Demo, items: &mut Vec<egui::Rect>| {
             let input = egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
