@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon-1024.png" alt="" width="128">
+
 # CopyQ-rs
 
 **L'historique du presse-papiers pour Mac qui ne garde jamais vos mots de passe en clair.**
@@ -8,6 +10,7 @@ Tout ce que vous copiez — textes, captures, fichiers — à portée de **⌘�
 Natif, rapide, chiffré, et rien ne quitte votre Mac.
 
 [![Build & captures macOS](https://github.com/aloulouamine/copyq-rs/actions/workflows/screenshots.yml/badge.svg)](https://github.com/aloulouamine/copyq-rs/actions/workflows/screenshots.yml)
+[![Dernière version](https://img.shields.io/github/v/release/aloulouamine/copyq-rs?label=t%C3%A9l%C3%A9charger&color=6e5bf5)](https://github.com/aloulouamine/copyq-rs/releases/latest)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Rust](https://img.shields.io/badge/Rust-egui-orange?logo=rust)
 ![11 langues](https://img.shields.io/badge/langues-11-6e5bf5)
@@ -35,20 +38,29 @@ Natif, rapide, chiffré, et rien ne quitte votre Mac.
 | Collage direct dans l'app d'origine | — | Oui |
 | Limites de taille et de nombre réglables | — | Oui |
 
-## Démarrage rapide
+## Installation
+
+**[⬇ Télécharger la dernière version (.dmg)](https://github.com/aloulouamine/copyq-rs/releases/latest)** — macOS 13 Ventura ou plus récent, Mac Apple Silicon et Intel.
+
+1. Ouvrez le `.dmg` et glissez **CopyQ-rs** dans **Applications**.
+2. Lancez l'app. Tant que les versions ne sont pas notarisées par Apple, macOS bloque le premier lancement : ouvrez **Réglages Système → Confidentialité et sécurité** et cliquez sur **Ouvrir quand même**.
+3. Autorisez CopyQ-rs dans **Réglages Système → Confidentialité et sécurité → Accessibilité** pour le collage direct. Sans cette autorisation, l'élément est copié et il reste à faire ⌘V.
+
+Ensuite : copiez quelque chose, appuyez sur **⌘⇧Z**, choisissez avec **↑ ↓** et validez avec **Entrée**.
+
+<details>
+<summary>Compiler depuis les sources</summary>
 
 ```bash
 # Rust requis : https://rustup.rs
-cargo install cargo-bundle
-cargo bundle --release
-open target/release/bundle/osx/CopyQ-rs.app
+cargo build --release
+bash ci/make_app.sh target/release/copyq-rs CopyQ-rs.app   # app signée ad hoc, avec icône
+open CopyQ-rs.app
 ```
 
-1. Copiez quelque chose, puis appuyez sur **⌘⇧Z**.
-2. Choisissez un élément avec **↑ ↓** et validez avec **Entrée** : il est collé dans l'app que vous utilisiez.
-3. La première fois, autorisez CopyQ-rs dans **Réglages Système → Confidentialité et sécurité → Accessibilité** pour le collage direct. Sans cette autorisation, l'élément est copié et il reste à faire ⌘V.
-
 Pour essayer sans empaqueter : `cargo run --release`.
+
+</details>
 
 ## Raccourcis
 
@@ -117,6 +129,8 @@ cargo fmt --check
 ```
 
 Chaque `git push` lance sur un Mac GitHub (macOS 14) : formatage et Clippy, tests unitaires, tests de bout en bout avec le vrai presse-papiers (`ci/e2e.py`), auto-test de l'app empaquetée (`ci/bundle_selftest.sh`) et captures d'écran dans plusieurs langues et thèmes. Résultats sur la branche `ci-results`.
+
+**Publier une version** : mettre à jour `version` dans `Cargo.toml`, puis pousser un tag `vX.Y.Z`. Le workflow `release.yml` compile un binaire universel, construit `CopyQ-rs-X.Y.Z.dmg`, le vérifie et publie la release. Avec les secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` et `APPLE_APP_PASSWORD`, l'app est signée Developer ID et notarisée.
 
 Les images de ce README sont composées à partir de ces captures : `python3 ci/readme_shots.py <shots> docs/screenshots` (la CI les dépose aussi dans `shots/readme/`).
 

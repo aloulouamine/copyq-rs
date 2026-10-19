@@ -1,0 +1,158 @@
+name: Release
+
+# Pousser un tag « vX.Y.Z » publie une release GitHub avec une image disque
+# universelle (Apple Silicon + Intel). Lancée à la main, elle produit seulement
+# le .dmg en artefact, sans release.
+#
+# Signature Developer ID et notarisation Apple, facultatives : définir les
+# secrets MACOS_CERT_P12 (certificat .p12 en base64), MACOS_CERT_PASSWORD,
+# APPLE_ID, APPLE_TEAM_ID et APPLE_APP_PASSWORD (mot de passe d'app).
+# Sans eux, l'app est signée ad hoc.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        run: |
+          CARGO=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            [ "$VERSION" = "$CARGO" ] || { echo "Tag v$VERSION ≠ Cargo.toml $CARGO"; exit 1; }
+          else
+            VERSION="$CARGO-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dmg=CopyQ-rs-$VERSION.dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Rust (deux architectures)
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ hashFiles('Cargo.toml') }}
+
+      - name: Tests
+        run: cargo test --release
+
+      - name: Compilation universelle
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          lipo -create -output copyq-rs \
+            target/aarch64-apple-darwin/release/copyq-rs \
+            target/x86_64-apple-darwin/release/copyq-rs
+          lipo -info copyq-rs
+
+      - name: Certificat Developer ID
+        id: cert
+        env:
+          P12: ${{ secrets.MACOS_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then
+            echo "Pas de certificat : signature ad hoc."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/release.keychain-db"
+          security create-keychain -p ci "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p ci "$KC"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -v -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)
+          echo "identity=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Application et image disque
+        env:
+          MACOS_SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p dist
+          bash ci/make_app.sh copyq-rs dist/CopyQ-rs.app "${{ steps.v.outputs.version }}"
+          bash ci/make_dmg.sh dist/CopyQ-rs.app "dist/${{ steps.v.outputs.dmg }}"
+
+      - name: Notarisation
+        if: steps.cert.outputs.identity != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          DMG="dist/${{ steps.v.outputs.dmg }}"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$DMG"
+
+      - name: Vérification de l'image disque
+        run: |
+          DMG="dist/${{ steps.v.outputs.dmg }}"
+          MNT=$(mktemp -d)
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT" >/dev/null
+          APP="$MNT/CopyQ-rs.app"
+          test -L "$MNT/Applications"
+          codesign --verify --strict --verbose=2 "$APP"
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/copyq-rs"); echo "Architectures : $ARCHS"
+          [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]]
+          plutil -extract CFBundleShortVersionString raw -o - "$APP/Contents/Info.plist" \
+            | grep -qx "${{ steps.v.outputs.version }}"
+          "$APP/Contents/MacOS/copyq-rs" --media-selftest
+          hdiutil detach "$MNT" >/dev/null
+          (cd dist && shasum -a 256 "${{ steps.v.outputs.dmg }}" > "${{ steps.v.outputs.dmg }}.sha256")
+          cat "dist/${{ steps.v.outputs.dmg }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.v.outputs.dmg }}
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+
+      - name: Release GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.cert.outputs.identity != '' }}
+        run: |
+          DMG="${{ steps.v.outputs.dmg }}"
+          {
+            echo "## Installer"
+            echo
+            echo "1. Téléchargez **$DMG** ci-dessous et ouvrez-le."
+            echo "2. Glissez **CopyQ-rs** dans le dossier **Applications**."
+            echo "3. Lancez l'app, puis appuyez sur **⌘⇧Z** pour ouvrir l'historique."
+            echo
+            if [ "$SIGNED" != "true" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> Cette version n'est pas encore notarisée par Apple. Au premier lancement, macOS la bloque :"
+              echo "> ouvrez **Réglages Système → Confidentialité et sécurité**, puis cliquez sur **Ouvrir quand même** en bas de la page."
+              echo "> Ou, dans le Terminal : \`xattr -dr com.apple.quarantine /Applications/CopyQ-rs.app\`"
+              echo
+            fi
+            echo "Pour coller directement dans l'app d'origine, autorisez CopyQ-rs dans **Réglages Système → Confidentialité et sécurité → Accessibilité**."
+            echo
+            echo "Compatible macOS 13 Ventura et plus récent, Mac Apple Silicon et Intel. Empreinte SHA-256 : \`$(cut -d' ' -f1 "dist/$DMG.sha256")\`"
+            echo
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" "dist/$DMG" "dist/$DMG.sha256" \
+            --title "CopyQ-rs ${{ steps.v.outputs.version }}" \
+            --notes-file notes.md --generate-notes --verify-tag

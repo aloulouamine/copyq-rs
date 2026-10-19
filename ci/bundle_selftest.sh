@@ -1,29 +1,10 @@
 #!/bin/bash
-# Empaquette le binaire dans une app .app minimale (signature ad hoc) et teste
-# l'inscription au lancement à l'ouverture de session (SMAppService).
+# Empaquette le binaire en app .app (même script que les releases, signature
+# ad hoc) et teste l'inscription au lancement à l'ouverture de session.
 set -euo pipefail
 APP="$RUNNER_TEMP/CopyQ-rs.app"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
-cp target/release/copyq-rs "$APP/Contents/MacOS/copyq-rs"
-cat > "$APP/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleIdentifier</key><string>com.amine.copyq-rs</string>
-  <key>CFBundleName</key><string>CopyQ-rs</string>
-  <key>CFBundleExecutable</key><string>copyq-rs</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
-  <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleLocalizations</key><array>
-    <string>en</string><string>fr</string><string>de</string><string>es</string>
-    <string>it</string><string>pt-BR</string><string>ja</string><string>ko</string>
-    <string>zh-Hans</string><string>zh-Hant</string><string>ar</string>
-  </array>
-</dict></plist>
-PLIST
-codesign --force --sign - "$APP"
+bash ci/make_app.sh target/release/copyq-rs "$APP"
+test -f "$APP/Contents/Resources/AppIcon.icns"
+plutil -extract CFBundleLocalizations raw -o - "$APP/Contents/Info.plist" | grep -q 11 \
+  || { echo "CFBundleLocalizations : 11 langues attendues"; exit 1; }
 "$APP/Contents/MacOS/copyq-rs" --login-item-selftest
