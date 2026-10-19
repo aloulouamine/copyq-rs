@@ -1,0 +1,120 @@
+   Compiling dirs-sys v0.4.1
+   Compiling egui-wgpu v0.37.0
+   Compiling egui-winit v0.37.0
+   Compiling mimalloc v0.1.52
+   Compiling ghash v0.6.0
+   Compiling muda v0.21.2
+   Compiling aes v0.9.3
+   Compiling ctr v0.10.1
+   Compiling aead v0.6.1
+   Compiling core-foundation v0.10.1
+   Compiling security-framework-sys v2.17.0
+   Compiling tinyvec v1.13.3
+   Compiling pollster v1.0.1
+   Compiling eframe v0.37.0
+   Compiling unicode-normalization v0.1.26
+   Compiling security-framework v3.7.0
+   Compiling tray-icon v0.26.1
+   Compiling aes-gcm v0.11.1
+   Compiling directories v5.0.1
+   Compiling sha2 v0.11.1
+   Compiling hmac v0.13.0
+   Compiling global-hotkey v0.9.0
+   Compiling tokio v1.54.0
+   Compiling objc2-service-management v0.3.2
+   Compiling base64 v0.23.1
+   Compiling unicode-bidi v0.3.18
+   Compiling turso_sync_sdk_kit v0.8.3
+   Compiling turso v0.8.3
+   Compiling copyq-rs v0.3.0 (/Users/runner/work/copyq-rs/copyq-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 01s
+     Running unittests src/main.rs (target/debug/deps/copyq_rs-0bc07d1faf38c582)
+
+running 71 tests
+test app::row::tests::kind_is_detected_from_the_text ... ok
+test app::row::tests::image_hashes_lists_only_images_still_in_history ... ok
+test app::row::tests::rows_are_mirrored_for_right_to_left_languages ... ok
+test app::row::tests::files_row_shows_name_count_and_missing_state ... ok
+test app::row::tests::meta_line_summarises_the_item ... ok
+test app::widgets::tests::choosing_in_a_combo_box_keeps_the_panel_open ... FAILED
+test app::widgets::tests::lines_are_broken_in_logical_order ... ok
+test clipboard::tests::cleared_but_not_yet_written_is_retried ... ok
+test clipboard::tests::concealed_is_kept_when_allowed_and_marked_sensitive ... ok
+test clipboard::tests::concealed_is_skipped_and_not_reread ... ok
+test clipboard::tests::encoder_writes_files_then_completes_meta_and_leaves_no_orphans ... ok
+test clipboard::tests::images_are_skipped_when_disabled_or_limit_is_zero ... ok
+test clipboard::tests::new_counter_reads ... ok
+test clipboard::tests::pause_skips_without_reading_types ... ok
+test clipboard::tests::unchanged_counter_does_nothing ... ok
+test clipboard::tests::without_counter_always_reads ... ok
+test crypto::tests::files_roundtrip_and_are_bound_to_their_name ... ok
+test crypto::tests::roundtrip ... ok
+test crypto::tests::same_text_gives_different_ciphertexts_but_same_fingerprint ... ok
+test crypto::tests::stored_format_is_stable ... ok
+test crypto::tests::wrong_key_or_tampering_is_rejected ... ok
+test history::tests::cached_stats_and_search_key_follow_changes ... ok
+test history::tests::caps_at_max ... ok
+test history::tests::duplicate_moves_to_front ... ok
+test history::tests::history_changes_reach_the_database ... ok
+test history::tests::ignores_blank_and_huge ... ok
+test history::tests::images_and_files_dedup_by_kind_and_are_capped ... ok
+test history::tests::limits_can_be_changed_with_preview ... ok
+test history::tests::preview_and_time ... ok
+test history::tests::push_adds_to_front ... ok
+test history::tests::reclassifies_probable_passwords_already_stored ... ok
+test history::tests::retention_expires_old_items ... ok
+test history::tests::search_all_words_case_insensitive ... ok
+test history::tests::search_ignores_accents_and_case ... ok
+test history::tests::sensitive_items_are_kept_flagged_and_hidden_from_search ... ok
+test history::tests::total_size_cap_evicts_oldest_but_keeps_newest ... ok
+test i18n::tests::every_key_used_in_the_code_exists ... ok
+test i18n::tests::every_language_has_every_key_with_the_same_placeholders ... ok
+test i18n::tests::right_to_left_lines_are_cut_into_pieces_in_visual_order ... ok
+test i18n::tests::system_locales_are_matched ... ok
+test i18n::tests::texts_are_filled_and_fall_back ... ok
+test logging::tests::poisoned_lock_is_recovered ... ok
+test media::tests::plain_images_from_previous_versions_are_encrypted ... ok
+test media::tests::rejects_empty_and_huge_images ... ok
+test media::tests::saves_encrypted_png_and_thumbnail_and_reloads_pixels ... ok
+test media::tests::sizes_are_human_readable ... ok
+test media::tests::stored_description_is_language_neutral_and_old_ones_still_display ... ok
+test pasteboard::tests::classifies_payloads ... ok
+test pasteboard::tests::detects_probable_passwords ... ok
+test pasteboard::tests::ignores_ordinary_text ... ok
+test pasteboard::tests::ignores_password_manager_types ... ok
+test pasteboard::tests::keeps_regular_text ... ok
+test settings::tests::default_limits_are_the_original_hardcoded_values ... ok
+test settings::tests::defaults_are_safe ... ok
+test settings::tests::out_of_range_values_are_clamped_and_limits_reset ... ok
+test settings::tests::roundtrip_and_partial_file ... ok
+test single_instance::tests::second_acquire_is_secondary ... ok
+test storage::tests::delete_and_dedup_work_on_encrypted_items ... ok
+test storage::tests::images_and_files_roundtrip_and_image_files_are_removed ... ok
+test storage::tests::key_is_requested_only_when_needed_and_once ... ok
+test storage::tests::migrates_legacy_json_once ... ok
+test storage::tests::passwords_are_encrypted_on_disk ... ok
+test storage::tests::plaintext_passwords_from_older_version_get_encrypted ... ok
+test storage::tests::roundtrip_upsert_delete_clear ... ok
+test storage::tests::sensitive_flag_roundtrip ... ok
+test storage::tests::special_characters_survive ... ok
+test storage::tests::upgrades_schema_of_older_database ... ok
+test storage::tests::without_key_passwords_are_never_written ... ok
+test theme::tests::cjk_fonts_match_the_region ... ok
+test app::widgets::tests::arabic_text_reads_right_to_left_in_order ... ok
+test app::widgets::tests::every_language_renders_completely_and_in_order ... ok
+
+failures:
+
+---- app::widgets::tests::choosing_in_a_combo_box_keeps_the_panel_open stdout ----
+
+thread 'app::widgets::tests::choosing_in_a_combo_box_keeps_the_panel_open' (39287) panicked at src/app/widgets.rs:399:9:
+ouvrir la liste garde le panneau ouvert
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    app::widgets::tests::choosing_in_a_combo_box_keeps_the_panel_open
+
+test result: FAILED. 70 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.20s
+
+error: test failed, to rerun pass `--bin copyq-rs`
