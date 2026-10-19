@@ -286,8 +286,7 @@ pub(super) fn anchored_popup<R>(
         .show(add);
     state.open = egui::Popup::is_id_open(ui.ctx(), id);
     let _ = &mut state.sub_was_open;
-    let inner = shown.map(|s| s.inner);
-    inner
+    shown.map(|s| s.inner)
 }
 
 #[cfg(test)]
