@@ -1,0 +1,10 @@
+    Updating crates.io index
+     Locking 661 packages to highest compatible versions
+      Adding directories v5.0.1 (available: v6.0.0)
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding toml v0.8.2 (available: v0.8.23)
+      Adding toml_datetime v0.6.3 (available: v0.6.11)
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+    Checking copyq-rs v0.3.1 (/Users/runner/work/copyq-rs/copyq-rs)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.69s
+rustfmt: 0 ; clippy: 0

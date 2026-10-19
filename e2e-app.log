@@ -1,0 +1,25 @@
+1792449222 [INFO] CopyQ-rs 0.3.1 démarré
+1792449222 [INFO] lancement au démarrage : Unavailable
+1792449222 [INFO] 11 éléments importés depuis /Users/runner/Library/Application Support/com.amine.copyq-rs/history.json
+1792449222 [INFO] base ouverte : 11 éléments (/Users/runner/Library/Application Support/com.amine.copyq-rs/history.db)
+1792449223 [INFO] réglages : Settings { save_passwords: false, detect_passwords: true, hide_after_copy: true, save_images: true, auto_paste: true, max_items: 500, max_images: 50, max_text_kb: 1000, max_total_mb: 200, max_image_mp: 50, retention_days: 0, language: "auto" }
+1792449223 [INFO] langue de l'interface : en
+1792449223 [INFO] 1 fichier(s) image d'une version précédente désormais chiffré(s)
+1792449223 [INFO] Raccourci global : ⌘⇧Z (touche physique KeyZ)
+1792449228 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1792449229 [INFO] nouvelle copie, types : []
+1792449230 [INFO] nouvelle copie, types : []
+1792449230 [INFO] nouvelle copie, types : []
+1792449230 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType", "org.nspasteboard.ConcealedType"]
+1792449230 [INFO] Copie ignorée (contenu confidentiel)
+1792449232 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1792449232 [INFO] Copie ignorée (mot de passe probable)
+1792449233 [INFO] nouvelle copie, types : ["public.png", "Apple PNG pasteboard type", "public.tiff", "NeXT TIFF v4.0 pasteboard type"]
+1792449233 [INFO] image copiée : 321 × 123
+1792449233 [WARN] vignette illisible : /Users/runner/Library/Application Support/com.amine.copyq-rs/images/8054b67f70619fff7cd3bb51133d6bb834ada337903fa810c53c94cd4f354994.thumb.png.enc : No such file or directory (os error 2)
+1792449236 [INFO] nouvelle copie, types : ["public.png", "Apple PNG pasteboard type", "public.tiff", "NeXT TIFF v4.0 pasteboard type"]
+1792449236 [INFO] image copiée : 321 × 123 · 1648
+1792449237 [INFO] nouvelle copie, types : ["public.file-url", "CorePasteboardFlavorType 0x6675726C", "dyn.ah62d4rv4gu8y6y4grf0gn5xbrzw1gydcr7u1e3cytf2gn", "NSFilenamesPboardType", "dyn.ah62d4rv4gu8yc6durvwwaznwmuuha2pxsvw0e55bsmwca7d3sbwu", "Apple URL pasteboard type"]
+1792449237 [INFO] 1 fichier(s) copié(s)
+1792449239 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1792449241 [INFO] nouveau lancement détecté : affichage de la fenêtre

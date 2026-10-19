@@ -1,0 +1,7 @@
+1792449349 [INFO] CopyQ-rs 0.3.1 démarré
+1792449349 [INFO] lancement au démarrage : Unavailable
+1792449349 [INFO] base ouverte : 18 éléments (/Users/runner/Library/Application Support/com.amine.copyq-rs/history.db)
+1792449349 [INFO] réglages : Settings { save_passwords: false, detect_passwords: true, hide_after_copy: true, save_images: true, auto_paste: true, max_items: 500, max_images: 50, max_text_kb: 1000, max_total_mb: 200, max_image_mp: 50, retention_days: 0, language: "auto" }
+1792449349 [INFO] langue de l'interface : ko
+1792449349 [INFO] police ko : /System/Library/Fonts/AppleSDGothicNeo.ttc (n° 0)
+1792449349 [INFO] Raccourci global : ⌘⇧Z (touche physique KeyZ)

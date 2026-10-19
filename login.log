@@ -1,0 +1,7 @@
+/Users/runner/work/_temp/CopyQ-rs.app: replacing existing signature
+/Users/runner/work/_temp/CopyQ-rs.app (0.3.1, build 1)
+app empaquetée : true ; statut brut : Some(3) ; statut : Disabled
+statut brut après activation : Some(1)
+activation : Ok(()) → Enabled
+désactivation : Ok(()) → Disabled
+SUCCÈS
