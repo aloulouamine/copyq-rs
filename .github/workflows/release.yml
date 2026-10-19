@@ -1,8 +1,11 @@
 name: Release
 
-# Pousser un tag « vX.Y.Z » publie une release GitHub avec une image disque
-# universelle (Apple Silicon + Intel). Lancée à la main, elle produit seulement
-# le .dmg en artefact, sans release.
+# Publie une release GitHub avec une image disque universelle (Apple Silicon +
+# Intel), version lue dans Cargo.toml :
+# - en poussant un tag « vX.Y.Z » ;
+# - ou à la main (Actions → Release → Run workflow) avec « publier » coché :
+#   le tag est alors créé sur le commit choisi.
+# Lancée à la main sans « publier », elle produit seulement le .dmg en artefact.
 #
 # Signature Developer ID et notarisation Apple, facultatives : définir les
 # secrets MACOS_CERT_P12 (certificat .p12 en base64), MACOS_CERT_PASSWORD,
@@ -13,6 +16,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publier:
+        description: "Publier la release (tag v<version de Cargo.toml>)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -27,15 +35,25 @@ jobs:
 
       - name: Version
         id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           CARGO=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             [ "$VERSION" = "$CARGO" ] || { echo "Tag v$VERSION ≠ Cargo.toml $CARGO"; exit 1; }
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.publier }}" = "true" ]; then
+            VERSION="$CARGO"
+            if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "La release v$VERSION existe déjà : augmentez la version dans Cargo.toml."; exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             VERSION="$CARGO-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "dmg=CopyQ-rs-$VERSION.dmg" >> "$GITHUB_OUTPUT"
 
       - name: Rust (deux architectures)
@@ -128,7 +146,7 @@ jobs:
             dist/*.sha256
 
       - name: Release GitHub
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.v.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNED: ${{ steps.cert.outputs.identity != '' }}
@@ -153,6 +171,6 @@ jobs:
             echo "Compatible macOS 13 Ventura et plus récent, Mac Apple Silicon et Intel. Empreinte SHA-256 : \`$(cut -d' ' -f1 "dist/$DMG.sha256")\`"
             echo
           } > notes.md
-          gh release create "$GITHUB_REF_NAME" "dist/$DMG" "dist/$DMG.sha256" \
-            --title "CopyQ-rs ${{ steps.v.outputs.version }}" \
-            --notes-file notes.md --generate-notes --verify-tag
+          gh release create "${{ steps.v.outputs.tag }}" "dist/$DMG" "dist/$DMG.sha256" \
+            --target "$GITHUB_SHA" --title "CopyQ-rs ${{ steps.v.outputs.version }}" \
+            --notes-file notes.md --generate-notes

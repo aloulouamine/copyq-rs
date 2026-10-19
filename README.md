@@ -130,7 +130,7 @@ cargo fmt --check
 
 Chaque `git push` lance sur un Mac GitHub (macOS 14) : formatage et Clippy, tests unitaires, tests de bout en bout avec le vrai presse-papiers (`ci/e2e.py`), auto-test de l'app empaquetée (`ci/bundle_selftest.sh`) et captures d'écran dans plusieurs langues et thèmes. Résultats sur la branche `ci-results`.
 
-**Publier une version** : mettre à jour `version` dans `Cargo.toml`, puis pousser un tag `vX.Y.Z`. Le workflow `release.yml` compile un binaire universel, construit `CopyQ-rs-X.Y.Z.dmg`, le vérifie et publie la release. Avec les secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` et `APPLE_APP_PASSWORD`, l'app est signée Developer ID et notarisée.
+**Publier une version** : mettre à jour `version` dans `Cargo.toml`, puis lancer **Actions → Release → Run workflow** en cochant *publier* (ou pousser un tag `vX.Y.Z`). Le workflow `release.yml` compile un binaire universel, construit `CopyQ-rs-X.Y.Z.dmg`, le vérifie et publie la release. Avec les secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` et `APPLE_APP_PASSWORD`, l'app est signée Developer ID et notarisée.
 
 Les images de ce README sont composées à partir de ces captures : `python3 ci/readme_shots.py <shots> docs/screenshots` (la CI les dépose aussi dans `shots/readme/`).
 
