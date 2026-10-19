@@ -279,32 +279,14 @@ pub(super) fn anchored_popup<R>(
     state: &mut PopupState,
     add: impl FnOnce(&mut Ui) -> R,
 ) -> Option<R> {
-    if button.clicked() {
-        state.open = !state.open;
-    }
-    let mut open = state.open;
-    let shown = egui::Popup::from_response(button)
+    let shown = egui::Popup::from_toggle_button_response(button)
         .id(id)
-        .open_bool(&mut open)
-        .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .align(align)
         .show(add);
-    let sub_open = egui::Popup::is_any_open(ui.ctx());
-    let mut inner = None;
-    if let Some(shown) = shown {
-        let outside = ui.input(|i| {
-            i.pointer.any_pressed()
-                && i.pointer.interact_pos().is_some_and(|pos| {
-                    !shown.response.rect.contains(pos) && !button.rect.contains(pos)
-                })
-        });
-        if outside && !sub_open && !state.sub_was_open {
-            open = false;
-        }
-        inner = Some(shown.inner);
-    }
-    state.sub_was_open = sub_open;
-    state.open = open;
+    state.open = egui::Popup::is_id_open(ui.ctx(), id);
+    let _ = &mut state.sub_was_open;
+    let inner = shown.map(|s| s.inner);
     inner
 }
 
