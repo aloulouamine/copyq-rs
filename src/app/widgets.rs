@@ -259,9 +259,184 @@ fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
 }
 
+/// Fenêtre surgissante ancrée à un bouton qui l'ouvre et la ferme (Réglages).
+///
+/// La mémoire d'egui ne garde qu'une fenêtre surgissante ouverte à la fois : ouvrir
+/// une liste déroulante à l'intérieur y fermait le panneau. L'état est donc gardé
+/// ici, et un clic à l'extérieur ne ferme le panneau que si aucune liste déroulante
+/// n'était ouverte (un clic dans la liste est « à l'extérieur » du panneau).
+#[derive(Default)]
+pub(super) struct PopupState {
+    pub open: bool,
+    sub_was_open: bool,
+}
+
+pub(super) fn anchored_popup<R>(
+    ui: &mut Ui,
+    button: &egui::Response,
+    id: egui::Id,
+    align: egui::RectAlign,
+    state: &mut PopupState,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    if button.clicked() {
+        state.open = !state.open;
+    }
+    let mut open = state.open;
+    let shown = egui::Popup::from_response(button)
+        .id(id)
+        .open_bool(&mut open)
+        .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+        .align(align)
+        .show(add);
+    let sub_open = egui::Popup::is_any_open(ui.ctx());
+    let mut inner = None;
+    if let Some(shown) = shown {
+        let outside = ui.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer.interact_pos().is_some_and(|pos| {
+                    !shown.response.rect.contains(pos) && !button.rect.contains(pos)
+                })
+        });
+        if outside && !sub_open && !state.sub_was_open {
+            open = false;
+        }
+        inner = Some(shown.inner);
+    }
+    state.sub_was_open = sub_open;
+    state.open = open;
+    inner
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Simule des clics de souris sur une petite interface : un bouton « Réglages »
+    /// ouvrant un panneau qui contient une liste déroulante.
+    #[test]
+    fn choosing_in_a_combo_box_keeps_the_panel_open() {
+        struct Demo {
+            state: PopupState,
+            choice: usize,
+            button: egui::Rect,
+            combo: egui::Rect,
+            panel: Option<egui::Rect>,
+        }
+        let ctx = egui::Context::default();
+        let mut demo = Demo {
+            state: PopupState::default(),
+            choice: 0,
+            button: egui::Rect::NOTHING,
+            combo: egui::Rect::NOTHING,
+            panel: None,
+        };
+        let mut items: Vec<egui::Rect> = Vec::new();
+        let mut frame = |events: Vec<egui::Event>, demo: &mut Demo, items: &mut Vec<egui::Rect>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| {
+                ui.add_space(300.0);
+                let button = ui.button("Réglages");
+                demo.button = button.rect;
+                let mut combo = egui::Rect::NOTHING;
+                let mut rows = Vec::new();
+                let panel = anchored_popup(
+                    ui,
+                    &button,
+                    egui::Id::unique("demo_panel"),
+                    egui::RectAlign::TOP_START,
+                    &mut demo.state,
+                    |ui| {
+                        ui.label("Langue");
+                        combo = egui::ComboBox::from_id_salt("demo_combo")
+                            .selected_text(format!("choix {}", demo.choice))
+                            .show_ui(ui, |ui| {
+                                for n in 0..4 {
+                                    let r = ui.selectable_value(
+                                        &mut demo.choice,
+                                        n,
+                                        format!("choix {n}"),
+                                    );
+                                    rows.push(r.rect);
+                                }
+                            })
+                            .response
+                            .rect;
+                        ui.min_rect()
+                    },
+                );
+                demo.combo = combo;
+                demo.panel = panel;
+                *items = rows;
+            });
+            out.textures_delta.clear();
+        };
+        let click = |pos: egui::Pos2| {
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ]
+        };
+        // Quelques images après chaque clic (animations, mise en page).
+        macro_rules! settle {
+            () => {
+                for _ in 0..3 {
+                    frame(vec![], &mut demo, &mut items);
+                }
+            };
+        }
+        settle!();
+        let at = demo.button.center();
+        frame(click(at), &mut demo, &mut items);
+        settle!();
+        assert!(
+            demo.state.open && demo.panel.is_some(),
+            "le bouton ouvre le panneau"
+        );
+
+        let at = demo.combo.center();
+        frame(click(at), &mut demo, &mut items);
+        settle!();
+        assert!(demo.state.open, "ouvrir la liste garde le panneau ouvert");
+        assert_eq!(items.len(), 4, "la liste déroulante est ouverte");
+
+        let at = items[2].center();
+        frame(click(at), &mut demo, &mut items);
+        settle!();
+        assert_eq!(demo.choice, 2, "le choix est pris en compte");
+        assert!(demo.state.open, "choisir garde le panneau ouvert");
+
+        let panel = demo.panel.expect("panneau affiché");
+        let outside = egui::pos2(790.0, 590.0);
+        assert!(!panel.contains(outside));
+        frame(click(outside), &mut demo, &mut items);
+        settle!();
+        assert!(!demo.state.open, "un clic à l'extérieur ferme le panneau");
+
+        let at = demo.button.center();
+        frame(click(at), &mut demo, &mut items);
+        frame(click(at), &mut demo, &mut items);
+        settle!();
+        assert!(!demo.state.open, "le bouton referme le panneau");
+    }
 
     #[test]
     fn lines_are_broken_in_logical_order() {

@@ -47,6 +47,8 @@ pub struct CopyApp {
     thumbs: HashMap<String, Option<egui::TextureHandle>>,
     confirm_clear: bool,
     open_settings_on_start: bool,
+    /// Panneau Réglages (ouvert ou non), voir `widgets::anchored_popup`.
+    settings_popup: widgets::PopupState,
     settings_tab: SettingsTab,
     /// Valeurs en cours de modification dans l'onglet « Limites ».
     limits_draft: Option<Settings>,
@@ -119,6 +121,7 @@ impl CopyApp {
             login_status: login_item::status(),
             confirm_clear: false,
             open_settings_on_start: std::env::var_os("COPYQ_OPEN_SETTINGS").is_some(),
+            settings_popup: Default::default(),
             settings_tab: if std::env::var("COPYQ_OPEN_SETTINGS").as_deref() == Ok("limits") {
                 SettingsTab::Limits
             } else {
@@ -408,7 +411,7 @@ impl CopyApp {
         }
         // Captures d'écran CI : ouvrir le panneau des réglages au démarrage.
         if std::mem::take(&mut self.open_settings_on_start) {
-            egui::Popup::open_id(ctx, egui::Id::unique(SETTINGS_POPUP));
+            self.settings_popup.open = true;
         }
         // Fermer la fenêtre = la masquer ; l'application reste dans la barre des menus.
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -438,7 +441,9 @@ impl CopyApp {
             self.scroll_to_selected = true;
         }
         if esc {
-            if self.query.is_empty() {
+            if self.settings_popup.open {
+                self.settings_popup.open = false;
+            } else if self.query.is_empty() {
                 platform::hide_window(ctx);
             } else {
                 self.query.clear();
@@ -587,15 +592,21 @@ impl CopyApp {
             self.confirm_clear = true;
         }
         let button = ghost_button(ui, t!("footer.settings"), p.text_muted, p);
-        egui::Popup::from_toggle_button_response(&button)
-            .id(egui::Id::unique(SETTINGS_POPUP))
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .align(if i18n::is_rtl() {
-                egui::RectAlign::TOP_START
-            } else {
-                egui::RectAlign::TOP_END
-            })
-            .show(|ui| self.settings_ui(ui, p));
+        let align = if i18n::is_rtl() {
+            egui::RectAlign::TOP_START
+        } else {
+            egui::RectAlign::TOP_END
+        };
+        let mut state = std::mem::take(&mut self.settings_popup);
+        widgets::anchored_popup(
+            ui,
+            &button,
+            egui::Id::unique(SETTINGS_POPUP),
+            align,
+            &mut state,
+            |ui| self.settings_ui(ui, p),
+        );
+        self.settings_popup = state;
     }
 
     fn shortcuts_ui(&self, ui: &mut Ui, p: &Palette) {
