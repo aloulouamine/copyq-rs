@@ -54,15 +54,8 @@ def copy_png(path):
 
 
 def copy_file(path):
-    # Comme le Finder : l'URL du fichier sous le type public.file-url. Sur macOS 15,
-    # écrire un objet fichier (`set the clipboard to (POSIX file …)` ou writeObjects
-    # d'une NSURL) depuis osascript laisse le presse-papiers vide : on écrit donc
-    # directement la donnée du type.
-    script = ('ObjC.import("AppKit"); function run(argv) {'
-              ' var pb = $.NSPasteboard.generalPasteboard; pb.clearContents;'
-              ' var url = $.NSURL.fileURLWithPath(argv[0]).absoluteString;'
-              ' if (!pb.setStringForType(url, "public.file-url")) throw "écriture refusée"; }')
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", script, path], check=True)
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "copy_file.js")
+    subprocess.run(["osascript", "-l", "JavaScript", script, path], check=True)
 
 
 def stored_texts():

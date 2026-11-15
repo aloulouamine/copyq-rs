@@ -54,6 +54,18 @@ Pour actualiser les dépendances, lancer `cargo update`, examiner le diff de
 de committer le lockfile. Mettre à jour ce document si les avertissements ou
 leur applicabilité changent. Ne pas contourner `--locked` en CI.
 
+Le filtre exécuté par le workflow est `ci/check_audit_warnings.sh`. Ses tests de
+régression sont conservés dans `ci/test_audit_warnings.py` et exécutés par l'audit :
+
+```sh
+python3 -m unittest discover -s ci -p test_audit_warnings.py
+```
+
+Ces fixtures vérifient les codes de sortie pour l'absence d'avertissement, un
+avertissement hors macOS, une correspondance exacte nom/version macOS, une autre
+version du même paquet, et un paquet retiré du registre sans objet advisory.
+Elles ne touchent ni au presse-papiers ni aux données de l'application.
+
 ## Outils de CI
 
 Les actions checkout v7.0.1, cache v6.1.0 et upload-artifact v7.0.2 sont épinglées
@@ -75,3 +87,8 @@ Les tests unitaires travaillent sur des données synthétiques et des répertoir
 temporaires. Réserver les auto-tests de l'application, les captures et les tests
 de bout en bout à un runner jetable : ils utilisent le presse-papiers et peuvent
 modifier l'historique local.
+
+Les copies de fichiers des captures et des tests e2e utilisent le même helper
+`ci/copy_file.js`, qui écrit directement le type `public.file-url`. Exécuter ce
+helper uniquement sur un runner jetable ; les vérifications locales se limitent
+à sa syntaxe, sans exécuter ni importer les helpers presse-papiers.

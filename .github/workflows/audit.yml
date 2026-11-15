@@ -10,12 +10,16 @@ on:
       - Cargo.lock
       - .github/workflows/audit.yml
       - ci/requirements-screenshots.txt
+      - ci/check_audit_warnings.sh
+      - ci/test_audit_warnings.py
   pull_request:
     paths:
       - Cargo.toml
       - Cargo.lock
       - .github/workflows/audit.yml
       - ci/requirements-screenshots.txt
+      - ci/check_audit_warnings.sh
+      - ci/test_audit_warnings.py
 
 permissions:
   contents: read
@@ -32,6 +36,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Tests du filtre RustSec (fixtures synthétiques)
+        run: python3 -m unittest discover -s ci -p test_audit_warnings.py
       - name: Rust stable + composants
         run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -60,18 +66,10 @@ jobs:
           # Un avertissement (unsound, non maintenu, yanked) sur un paquet des graphes
           # macOS fait échouer le job ; les avertissements hors macOS restent informatifs.
           cargo audit --file Cargo.lock --json > audit.json
-          jq -r '.warnings[][] | "\(.package.name) v\(.package.version) \(.kind) \(.advisory.id // "-")"' audit.json \
-            | sort -u > audit-warnings.log
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
             cargo tree --locked --target "$target" --edges normal,build --prefix none --format '{p}'
           done | cut -d' ' -f1,2 | sort -u > macos-packages.log
-          awk 'NR == FNR { macos[$1 " " $2] = 1; next } ($1 " " $2) in macos' \
-            macos-packages.log audit-warnings.log > audit-macos-warnings.log
-          if [ -s audit-macos-warnings.log ]; then
-            echo "::error::Avertissements RustSec sur des paquets des graphes macOS :"
-            cat audit-macos-warnings.log
-            exit 1
-          fi
+          bash ci/check_audit_warnings.sh audit.json macos-packages.log
       - name: Clippy (règles par défaut)
         run: cargo clippy --locked --all-targets 2>&1 | tee clippy-default.log || true
       - name: Clippy (pedantic)

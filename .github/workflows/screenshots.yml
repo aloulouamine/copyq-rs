@@ -90,7 +90,7 @@ jobs:
           printf '%s' '회의가 오후 3시로 변경되었습니다' | pbcopy; sleep 2
           printf '%s' '會議改到下午三點（第二會議室）' | pbcopy; sleep 2
           printf 'demo' > "/tmp/Présentation client.mov"
-          osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
+          osascript -l JavaScript ci/copy_file.js "/tmp/Présentation client.mov"
           sleep 2
           kill $PID || true
           sleep 2
