@@ -54,7 +54,12 @@ def copy_png(path):
 
 
 def copy_file(path):
-    subprocess.run(["osascript", "-e", f'set the clipboard to (POSIX file "{path}")'], check=True)
+    # Comme le Finder : une NSURL de fichier écrite dans NSPasteboard. Sur macOS 15,
+    # `set the clipboard to (POSIX file …)` d'AppleScript laisse le presse-papiers vide.
+    script = ('ObjC.import("AppKit"); function run(argv) {'
+              ' var pb = $.NSPasteboard.generalPasteboard; pb.clearContents;'
+              ' if (!pb.writeObjects($([$.NSURL.fileURLWithPath(argv[0])]))) throw "écriture refusée"; }')
+    subprocess.run(["osascript", "-l", "JavaScript", "-e", script, path], check=True)
 
 
 def stored_texts():
