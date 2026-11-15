@@ -25,8 +25,12 @@ paquet n'est pas utilisé sur macOS. Les journaux restent accessibles pendant
 14 jours dans l'artefact `dependency-audit-<run_id>-<run_attempt>`, même après un
 échec ; ce workflow ne publie plus une branche `ci-audit`.
 
-Les avertissements informatifs de RustSec restent affichés, sans liste d'avis
-ignorés. Les six avertissements ci-dessous sont connus dans ce lockfile et
+Les avertissements de RustSec (`unsound`, non maintenu, yanked) restent affichés,
+sans liste d'avis ignorés. **Un avertissement sur un paquet présent dans un graphe
+macOS (Apple Silicon ou Intel, dépendances normales et de compilation) fait aussi
+échouer le job** : par exemple un retour de rustix 1.x sous 1.1.6
+(RUSTSEC-2026-0486, `unsound`). Le détail figure dans `audit-macos-warnings.log`.
+Les avertissements hors macOS restent informatifs. Les six avertissements ci-dessous sont connus dans ce lockfile et
 absents des graphes macOS Apple Silicon et Intel (dépendances normales **et** de
 compilation) :
 

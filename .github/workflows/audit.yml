@@ -55,6 +55,23 @@ jobs:
           # Les avertissements informatifs GTK/Wayland/D-Bus restent visibles ;
           # leur absence des graphes macOS est documentée dans docs/dependencies-security.md.
           cargo audit --file Cargo.lock 2>&1 | tee audit.log
+      - name: Avertissements RustSec sur les graphes macOS (bloquant)
+        run: |
+          # Un avertissement (unsound, non maintenu, yanked) sur un paquet des graphes
+          # macOS fait échouer le job ; les avertissements hors macOS restent informatifs.
+          cargo audit --file Cargo.lock --json > audit.json
+          jq -r '.warnings[][] | "\(.package.name) v\(.package.version) \(.kind) \(.advisory.id // "-")"' audit.json \
+            | sort -u > audit-warnings.log
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo tree --locked --target "$target" --edges normal,build --prefix none --format '{p}'
+          done | cut -d' ' -f1,2 | sort -u > macos-packages.log
+          awk 'NR == FNR { macos[$1 " " $2] = 1; next } ($1 " " $2) in macos' \
+            macos-packages.log audit-warnings.log > audit-macos-warnings.log
+          if [ -s audit-macos-warnings.log ]; then
+            echo "::error::Avertissements RustSec sur des paquets des graphes macOS :"
+            cat audit-macos-warnings.log
+            exit 1
+          fi
       - name: Clippy (règles par défaut)
         run: cargo clippy --locked --all-targets 2>&1 | tee clippy-default.log || true
       - name: Clippy (pedantic)
