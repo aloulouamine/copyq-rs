@@ -30,9 +30,9 @@ sans liste d'avis ignorés. **Un avertissement sur un paquet présent dans un gr
 macOS (Apple Silicon ou Intel, dépendances normales et de compilation) fait aussi
 échouer le job** : par exemple un retour de rustix 1.x sous 1.1.6
 (RUSTSEC-2026-0486, `unsound`). Le détail figure dans `audit-macos-warnings.log`.
-Les avertissements hors macOS restent informatifs. Les six avertissements ci-dessous sont connus dans ce lockfile et
-absents des graphes macOS Apple Silicon et Intel (dépendances normales **et** de
-compilation) :
+Les avertissements hors macOS restent informatifs. Les six avertissements
+ci-dessous sont connus dans ce lockfile et absents des graphes macOS Apple
+Silicon et Intel (dépendances normales **et** de compilation) :
 
 | Avis | Paquet | Chemin hors macOS |
 |---|---|---|
