@@ -27,11 +27,11 @@ permissions:
 
 jobs:
   dmg:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Version
         id: v
@@ -59,21 +59,21 @@ jobs:
       - name: Rust (deux architectures)
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: release-${{ hashFiles('Cargo.toml') }}
+          key: release-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
 
       - name: Tests
-        run: cargo test --release
+        run: cargo test --locked --release
 
       - name: Compilation universelle
         run: |
-          cargo build --release --target aarch64-apple-darwin
-          cargo build --release --target x86_64-apple-darwin
+          cargo build --locked --release --target aarch64-apple-darwin
+          cargo build --locked --release --target x86_64-apple-darwin
           lipo -create -output copyq-rs \
             target/aarch64-apple-darwin/release/copyq-rs \
             target/x86_64-apple-darwin/release/copyq-rs
@@ -138,9 +138,10 @@ jobs:
           (cd dist && shasum -a 256 "${{ steps.v.outputs.dmg }}" > "${{ steps.v.outputs.dmg }}.sha256")
           cat "dist/${{ steps.v.outputs.dmg }}.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.v.outputs.dmg }}
+          archive: true
           path: |
             dist/*.dmg
             dist/*.sha256

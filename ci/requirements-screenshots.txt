@@ -1,0 +1,2 @@
+# Composition des captures du README (aucune dépendance transitive).
+Pillow==13.0.0
