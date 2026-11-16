@@ -1,0 +1,17 @@
+1794816766 [INFO] CopyQ-rs 0.3.2 démarré
+1794816766 [INFO] lancement au démarrage : Unavailable
+1794816766 [INFO] 11 éléments importés depuis /Users/runner/Library/Application Support/com.amine.copyq-rs/history.json
+1794816766 [INFO] base ouverte : 11 éléments (/Users/runner/Library/Application Support/com.amine.copyq-rs/history.db)
+1794816766 [INFO] réglages : Settings { save_passwords: false, detect_passwords: true, hide_after_copy: true, save_images: true, auto_paste: true, max_items: 500, max_images: 50, max_text_kb: 1000, max_total_mb: 200, max_image_mp: 50, retention_days: 0, language: "auto" }
+1794816766 [INFO] langue de l'interface : en
+1794816767 [INFO] Raccourci global : ⌘⇧Z (touche physique KeyZ)
+1794816771 [INFO] nouvelle copie, types : ["public.png", "Apple PNG pasteboard type", "public.tiff", "NeXT TIFF v4.0 pasteboard type"]
+1794816771 [INFO] image copiée : 1280 × 720
+1794816771 [WARN] vignette illisible : /Users/runner/Library/Application Support/com.amine.copyq-rs/images/4a5ce68ebf2f500ff5b8e2ab4be272192d73c046300e2c612c5694d3ab717f98.thumb.png.enc : No such file or directory (os error 2)
+1794816773 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1794816776 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1794816778 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1794816780 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1794816782 [INFO] nouvelle copie, types : ["public.utf8-plain-text", "NSStringPboardType"]
+1794816784 [INFO] nouvelle copie, types : ["public.file-url", "CorePasteboardFlavorType 0x6675726C", "dyn.ah62d4rv4gu8y6y4grf0gn5xbrzw1gydcr7u1e3cytf2gn", "NSFilenamesPboardType", "dyn.ah62d4rv4gu8yc6durvwwaznwmuuha2pxsvw0e55bsmwca7d3sbwu", "Apple URL pasteboard type"]
+1794816784 [INFO] 1 fichier(s) copié(s)

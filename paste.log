@@ -1,0 +1,6 @@
+app cible : pid 12100
+autorisation Accessibilité : true
+cible pid 12100 → Pasted
+champ de la cible : « colle-auto-15171 »
+SUCCÈS
+ci/paste_test.sh: line 32: 12100 Terminated: 15          /tmp/paste_target
