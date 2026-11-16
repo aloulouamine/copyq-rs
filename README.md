@@ -53,12 +53,12 @@ Ensuite : copiez quelque chose, appuyez sur **⌘⇧Z**, choisissez avec **↑ �
 
 ```bash
 # Rust requis : https://rustup.rs
-cargo build --release
+cargo build --locked --release
 bash ci/make_app.sh target/release/copyq-rs CopyQ-rs.app   # app signée ad hoc, avec icône
 open CopyQ-rs.app
 ```
 
-Pour essayer sans empaqueter : `cargo run --release`.
+Pour essayer sans empaqueter : `cargo run --locked --release`.
 
 </details>
 
@@ -123,14 +123,16 @@ Les fichiers copiés depuis le Finder sont gardés par leur emplacement, pas cop
 ## Développement
 
 ```bash
-cargo test                # tests unitaires
-cargo clippy -- -D warnings
+cargo test --locked       # tests unitaires
+cargo clippy --locked -- -D warnings
 cargo fmt --check
 ```
 
-Chaque `git push` lance sur un Mac GitHub (macOS 14) : formatage et Clippy, tests unitaires, tests de bout en bout avec le vrai presse-papiers (`ci/e2e.py`), auto-test de l'app empaquetée (`ci/bundle_selftest.sh`) et captures d'écran dans plusieurs langues et thèmes. Résultats sur la branche `ci-results`.
+Chaque `git push` lance sur un Mac GitHub (macOS 15) : formatage et Clippy, tests unitaires, tests de bout en bout avec le vrai presse-papiers (`ci/e2e.py`), auto-test de l'app empaquetée (`ci/bundle_selftest.sh`) et captures d'écran dans plusieurs langues et thèmes. Résultats sur la branche `ci-results`.
 
-**Publier une version** : mettre à jour `version` dans `Cargo.toml`, puis lancer **Actions → Release → Run workflow** en cochant *publier* (ou pousser un tag `vX.Y.Z`). Le workflow `release.yml` compile un binaire universel, construit `CopyQ-rs-X.Y.Z.dmg`, le vérifie et publie la release. Avec les secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` et `APPLE_APP_PASSWORD`, l'app est signée Developer ID et notarisée.
+Les dépendances Rust sont figées dans `Cargo.lock` ; les commandes CI utilisent `--locked`. Un [audit de sécurité](docs/dependencies-security.md) bloque les vulnérabilités connues à chaque changement de dépendances et chaque semaine.
+
+**Publier une version** : mettre à jour `version` dans `Cargo.toml` et la racine de `Cargo.lock` (avec `cargo check`), puis lancer **Actions → Release → Run workflow** en cochant *publier* (ou pousser un tag `vX.Y.Z`). Le workflow `release.yml` compile un binaire universel, construit `CopyQ-rs-X.Y.Z.dmg`, le vérifie et publie la release. Avec les secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` et `APPLE_APP_PASSWORD`, l'app est signée Developer ID et notarisée.
 
 Les images de ce README sont composées à partir de ces captures : `python3 ci/readme_shots.py <shots> docs/screenshots` (la CI les dépose aussi dans `shots/readme/`).
 

@@ -14,19 +14,19 @@ defaults:
 
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: never
       # Compilation plus rapide en CI (pas de LTO).
       CARGO_PROFILE_RELEASE_LTO: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust stable
         run: rustup update stable && rustup default stable && rustc --version
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -44,15 +44,15 @@ jobs:
           rustup component add rustfmt clippy
           set +e
           cargo fmt --check > lint.log 2>&1; fmt=$?
-          cargo clippy --all-targets -- -D warnings >> lint.log 2>&1; clippy=$?
+          cargo clippy --locked --all-targets -- -D warnings >> lint.log 2>&1; clippy=$?
           echo "rustfmt: $fmt ; clippy: $clippy" | tee -a lint.log
           [ $fmt -eq 0 ] && [ $clippy -eq 0 ]
 
       - name: Tests
-        run: cargo test --release 2>&1 | tee test.log
+        run: cargo test --locked --release 2>&1 | tee test.log
 
       - name: Build
-        run: cargo build --release 2>&1 | tee build.log
+        run: cargo build --locked --release 2>&1 | tee build.log
 
       - name: Trousseau macOS (clé de chiffrement)
         run: python3 -c "import subprocess,sys; sys.exit(subprocess.run(['./target/release/copyq-rs','--keychain-selftest'],timeout=60).returncode)" 2>&1 | tee keychain.log
@@ -90,7 +90,7 @@ jobs:
           printf '%s' '회의가 오후 3시로 변경되었습니다' | pbcopy; sleep 2
           printf '%s' '會議改到下午三點（第二會議室）' | pbcopy; sleep 2
           printf 'demo' > "/tmp/Présentation client.mov"
-          osascript -e 'set the clipboard to (POSIX file "/tmp/Présentation client.mov")'
+          osascript -l JavaScript ci/copy_file.js "/tmp/Présentation client.mov"
           sleep 2
           kill $PID || true
           sleep 2
@@ -136,8 +136,8 @@ jobs:
       - name: Images du README (shots/readme, à copier dans docs/screenshots)
         continue-on-error: true
         run: |
-          python3 -m pip install --quiet --user --break-system-packages pillow 2>/dev/null \
-            || python3 -m pip install --quiet --user pillow
+          python3 -m pip install --quiet --user --break-system-packages -r ci/requirements-screenshots.txt 2>/dev/null \
+            || python3 -m pip install --quiet --user -r ci/requirements-screenshots.txt
           python3 ci/readme_shots.py shots shots/readme
 
       - name: Publier les captures et journaux (branche ci-results)

@@ -54,7 +54,8 @@ def copy_png(path):
 
 
 def copy_file(path):
-    subprocess.run(["osascript", "-e", f'set the clipboard to (POSIX file "{path}")'], check=True)
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "copy_file.js")
+    subprocess.run(["osascript", "-l", "JavaScript", script, path], check=True)
 
 
 def stored_texts():

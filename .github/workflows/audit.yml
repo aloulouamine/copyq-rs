@@ -1,12 +1,28 @@
-name: Audit qualité
+name: Audit qualité et dépendances
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * 1"
   push:
-    paths: [".github/workflows/audit.yml"]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/audit.yml
+      - ci/requirements-screenshots.txt
+      - ci/check_audit_warnings.sh
+      - ci/test_audit_warnings.py
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/audit.yml
+      - ci/requirements-screenshots.txt
+      - ci/check_audit_warnings.sh
+      - ci/test_audit_warnings.py
 
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
@@ -14,52 +30,57 @@ defaults:
 
 jobs:
   audit:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tests du filtre RustSec (fixtures synthétiques)
+        run: python3 -m unittest discover -s ci -p test_audit_warnings.py
       - name: Rust stable + composants
         run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cargo/bin
             target
-          key: audit-${{ hashFiles('Cargo.toml') }}
-          restore-keys: audit-
+          key: audit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}
+          restore-keys: audit-${{ runner.os }}-${{ runner.arch }}-
+      - name: Graphes macOS (dépendances normales et de compilation)
+        run: |
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo tree --locked --target "$target" --edges normal,build > "macos-$target.log"
+          done
+          cargo tree --locked --duplicates > duplicates.log
+      - name: Failles connues (RustSec, bloquant)
+        run: |
+          cargo install cargo-audit --version 0.23.0 --locked
+          # Le lockfile entier est audité, sans ignorer d'avis ni masquer l'échec.
+          # Les avertissements informatifs GTK/Wayland/D-Bus restent visibles ;
+          # leur absence des graphes macOS est documentée dans docs/dependencies-security.md.
+          cargo audit --file Cargo.lock 2>&1 | tee audit.log
+      - name: Avertissements RustSec sur les graphes macOS (bloquant)
+        run: |
+          # Un avertissement (unsound, non maintenu, yanked) sur un paquet des graphes
+          # macOS fait échouer le job ; les avertissements hors macOS restent informatifs.
+          cargo audit --file Cargo.lock --json > audit.json
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo tree --locked --target "$target" --edges normal,build --prefix none --format '{p}'
+          done | cut -d' ' -f1,2 | sort -u > macos-packages.log
+          bash ci/check_audit_warnings.sh audit.json macos-packages.log
       - name: Clippy (règles par défaut)
-        run: cargo clippy --all-targets 2>&1 | tee clippy-default.log || true
+        run: cargo clippy --locked --all-targets 2>&1 | tee clippy-default.log || true
       - name: Clippy (pedantic)
-        run: cargo clippy --all-targets -- -W clippy::pedantic 2>&1 | tee clippy-pedantic.log || true
+        run: cargo clippy --locked --all-targets -- -W clippy::pedantic 2>&1 | tee clippy-pedantic.log || true
       - name: Formatage
         run: cargo fmt --check 2>&1 | tee fmt.log || true
-      - name: Failles connues (RustSec)
-        run: |
-          command -v cargo-audit || cargo install cargo-audit --locked
-          cargo audit 2>&1 | tee audit.log || true
-      - name: Dépendances
-        run: |
-          cargo tree -d --depth 0 2>&1 | tee duplicates.log || true
-          cargo tree --prefix none --edges normal 2>/dev/null | sort -u | wc -l | tee deps-count.log
-          cargo update --dry-run --verbose 2>&1 | tee outdated.log || true
-          ls -la target/release/copyq-rs 2>/dev/null | tee -a deps-count.log || true
-      - name: Dépendances signalées réellement compilées sur macOS ?
-        run: |
-          for c in quick-xml@0.30.0 lru glib zvariant zbus_names paste proc-macro-error ttf-parser; do
-            echo "== $c"; cargo tree -i "$c" --target aarch64-apple-darwin --edges normal,build 2>&1 | head -8 || true
-          done | tee mac-deps.log || true
-          cargo tree --target aarch64-apple-darwin --prefix none --edges normal 2>/dev/null | sort -u | wc -l | tee mac-count.log
-
-      - name: Publier (branche ci-audit)
+      - name: Conserver les résultats
         if: always()
-        run: |
-          mkdir -p /tmp/out && cp *.log /tmp/out/ 2>/dev/null || true
-          cd /tmp/out
-          git init -q -b ci-audit
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          echo "${GITHUB_SHA}" > commit.txt
-          git add -A && git commit -qm "Audit ${GITHUB_SHA}"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-audit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          archive: true
+          path: '*.log'
+          retention-days: 14
